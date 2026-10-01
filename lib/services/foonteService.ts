@@ -9,7 +9,7 @@ export interface FoonteSendResult {
   responseBody: string;
 }
 
-const FOONTE_SEND_URL = 'https://api.foonte.com/send';
+const FOONTE_SEND_URL = 'https://api.fonnte.com/send';
 const REQUEST_TIMEOUT_MS = 4_000;
 
 export function getFoonteConfig(env = process.env): FoonteConfig {
@@ -21,7 +21,7 @@ export function getFoonteConfig(env = process.env): FoonteConfig {
   return { apiToken, groupId };
 }
 
-/** Kirim teks reminder ke grup WhatsApp melalui Foonte. */
+/** Kirim teks reminder ke grup WhatsApp melalui Foonte (Fonnte). */
 export async function sendFoonteMessage(
   message: string,
   config: FoonteConfig,
@@ -36,7 +36,15 @@ export async function sendFoonteMessage(
       body: JSON.stringify({ target: config.groupId, message, countryCode: '62' }),
       signal: controller.signal,
     });
-    return { ok: response.ok, status: response.status, responseBody: (await response.text()).slice(0, 1_000) };
+    const responseBody = (await response.text()).slice(0, 1_000);
+    // Fonnte selalu membalas HTTP 200 meski token/target salah; status asli ada di body JSON.
+    let providerRejected = false;
+    try {
+      providerRejected = JSON.parse(responseBody)?.status === false;
+    } catch {
+      providerRejected = false;
+    }
+    return { ok: response.ok && !providerRejected, status: response.status, responseBody };
   } catch (error) {
     const reason = error instanceof Error && error.name === 'AbortError' ? 'request_timeout' : 'request_failed';
     return { ok: false, status: 0, responseBody: reason };

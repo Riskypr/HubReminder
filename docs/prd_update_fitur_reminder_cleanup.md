@@ -26,7 +26,7 @@ Dokumen ini mendefinisikan pembaruan sistem reminder otomatis untuk jadwal/aktiv
        ├─► Format Pesan Notifikasi (Template)
        │
        ▼
-[ Foonte API Endpoint: https://api.foonte.com/send ]
+[ Foonte API Endpoint: https://api.fonnte.com/send ]
        │ (POST payload: target=Group_ID, message=Text)
        ▼
 [ WhatsApp Group ]
@@ -45,7 +45,7 @@ Dokumen ini mendefinisikan pembaruan sistem reminder otomatis untuk jadwal/aktiv
 * **Frequency**: Disesuaikan (misal: Setiap hari pukul 07:00 WIB).
 
 #### B. Foonte WhatsApp Gateway
-* **Endpoint**: `https://api.foonte.com/send`
+* **Endpoint**: `https://api.fonnte.com/send`
 * **Headers**: `Authorization: <FOONTE_TOKEN>`
 * **Payload**:
   ```json
@@ -74,6 +74,7 @@ Dokumen ini mendefinisikan pembaruan sistem reminder otomatis untuk jadwal/aktiv
 ```env
 # Foonte Configuration
 FOONTE_API_TOKEN=your_foonte_token_here
+# Group ID target (contoh: 120363012345678901@g.us). Bukan link undangan chat.whatsapp.com/
 FOONTE_WA_GROUP_ID=your_target_group_id@g.us
 
 # Cron Security

@@ -21,13 +21,19 @@ describe('sendFoonteMessage()', () => {
     const result = await sendFoonteMessage('Halo tim', { apiToken: 'token-test', groupId: 'group@g.us' }, fetcher);
     expect(result).toMatchObject({ ok: true, status: 200 });
     expect(fetcher).toHaveBeenCalledWith(
-      'https://api.foonte.com/send',
+      'https://api.fonnte.com/send',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'token-test' }),
         body: JSON.stringify({ target: 'group@g.us', message: 'Halo tim', countryCode: '62' }),
       })
     );
+  });
+
+  it('menganggap respons provider status:false sebagai kegagalan meski HTTP 200', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('{"status":false,"reason":"invalid token"}', { status: 200 }));
+    const result = await sendFoonteMessage('Halo tim', { apiToken: 'token-salah', groupId: 'group@g.us' }, fetcher);
+    expect(result).toMatchObject({ ok: false, status: 200 });
   });
 
   it('mengembalikan kegagalan aman saat provider tidak dapat dihubungi', async () => {
