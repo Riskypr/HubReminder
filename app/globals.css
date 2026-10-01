@@ -1,0 +1,105 @@
+/* app/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-status-pending:       #2F6FED;
+  --color-status-pending-bg:    #E8F0FE;
+  --color-status-done:          #2E9E5B;
+  --color-status-done-bg:       #E6F6EC;
+  --color-status-unknown:       #8A8F98;
+  --color-status-unknown-bg:    #EEF0F2;
+
+  --color-bg:                   #F7F8FA;
+  --color-surface:              #FFFFFF;
+  --color-border:               #E4E7EB;
+  --color-text-primary:         #1A1D23;
+  --color-text-secondary:       #5B6270;
+  --color-text-muted:           #9AA1AC;
+
+  --color-primary:              #2F6FED;
+  --color-primary-dark:         #1E4FBB;
+
+  --color-warning:              #E0A100;
+  --color-warning-bg:           #FFF4DC;
+}
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-app-bg text-text-primary;
+    min-height: 100dvh;
+  }
+
+  * {
+    @apply box-border;
+  }
+}
+
+@layer components {
+  /* Status Badge */
+  .badge-pending {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold;
+    background-color: var(--color-status-pending-bg);
+    color: var(--color-status-pending);
+  }
+  .badge-done {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold;
+    background-color: var(--color-status-done-bg);
+    color: var(--color-status-done);
+  }
+  .badge-unknown {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold;
+    background-color: var(--color-status-unknown-bg);
+    color: var(--color-status-unknown);
+  }
+
+  /* Card */
+  .card {
+    @apply rounded-2xl bg-surface border border-border p-4 shadow-sm;
+  }
+
+  /* Primary Button */
+  .btn-primary {
+    @apply rounded-xl bg-primary text-white font-semibold px-5 py-3
+           min-h-[44px] min-w-[44px] text-sm
+           transition-colors hover:bg-primary-dark active:scale-95
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* Secondary/outline Button */
+  .btn-outline {
+    @apply rounded-xl border border-border bg-surface text-text-primary font-semibold px-5 py-3
+           min-h-[44px] min-w-[44px] text-sm
+           transition-colors hover:bg-app-bg active:scale-95
+           disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* Input */
+  .input {
+    @apply w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm
+           text-text-primary placeholder:text-text-muted
+           focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary
+           transition-colors;
+  }
+
+  /* Label */
+  .label {
+    @apply block text-sm font-medium text-text-primary mb-1.5;
+  }
+
+  /* Bottom Nav Tab */
+  .bottom-nav-tab {
+    @apply flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium
+           text-text-muted transition-colors min-h-[44px] min-w-[44px] justify-center;
+  }
+  .bottom-nav-tab.active {
+    @apply text-primary;
+  }
+}
