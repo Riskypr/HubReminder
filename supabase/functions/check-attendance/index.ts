@@ -6,6 +6,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { fetchDashboard } from './fetcher.ts';
 import { parseStatus } from './parser.ts';
 import { sendWebPushNotification } from './notifier.ts';
+import { isReminderTimeDue } from './reminder.ts';
 
 // AES-GCM decryption helper untuk Deno runtime
 async function decryptCookie(encrypted: string, rawKey: string): Promise<string> {
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
     // 1. Ambil seluruh session yang bukan 'expired'
     const { data: sessions, error: sessionErr } = await supabase
       .from('maganghub_sessions')
-      .select('id, user_id, encrypted_cookie, status')
+      .select('id, user_id, encrypted_cookie, status, profiles(timezone)')
       .neq('status', 'expired');
 
     if (sessionErr) {
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
       try {
         const cookiePlaintext = await decryptCookie(session.encrypted_cookie, encryptionKey);
 
-        // a. Fetch HTML dashboard
+        // a. Fetch data MagangHub API / dashboard
         const fetchRes = await fetchDashboard(cookiePlaintext);
 
         let detectedStatus: 'belum_lapor' | 'selesai' | 'unknown' | 'session_expired' = 'unknown';
@@ -82,6 +83,44 @@ Deno.serve(async (req) => {
         if (fetchRes.isLoginRedirect) {
           detectedStatus = 'session_expired';
           detectedVia = 'login_redirect';
+        } else if (fetchRes.apiData?.home) {
+          const home = ((fetchRes.apiData.home as any).data ?? fetchRes.apiData.home) as Record<string, any>;
+          if (home.is_scheduled_off_day || home.is_holiday) {
+            detectedStatus = 'selesai';
+            detectedVia = 'api:off_day_or_holiday';
+          } else if (
+            home.has_attendance === true ||
+            home.has_attendance === 1 ||
+            home.has_attendance === 'true' ||
+            home.status === 'filled' ||
+            home.status === 'selesai' ||
+            (home.attendance && typeof home.attendance === 'object' && Object.keys(home.attendance).length > 0)
+          ) {
+            detectedStatus = 'selesai';
+            detectedVia = 'api:has_attendance=true';
+          } else {
+            detectedStatus = 'belum_lapor';
+            detectedVia = 'api:has_attendance=false';
+          }
+
+          // Sinkronisasi data profil jika tersedia
+          if (fetchRes.apiData.user) {
+            const u = fetchRes.apiData.user;
+            await supabase
+              .from('profiles')
+              .update({
+                full_name: u.name || undefined,
+                company_name: u.internship_company || u.company || undefined,
+                photo_url: u.photo_url || undefined,
+                internship_period:
+                  u.internship_start_date && u.internship_end_date
+                    ? `${u.internship_start_date} – ${u.internship_end_date}`
+                    : undefined,
+                participant_status: u.participant_status?.reason || undefined,
+                maganghub_synced_at: new Date().toISOString(),
+              })
+              .eq('id', session.user_id);
+          }
         } else if (fetchRes.ok && fetchRes.html) {
           const parseRes = parseStatus(fetchRes.html);
           detectedStatus = parseRes.status;
@@ -129,6 +168,15 @@ Deno.serve(async (req) => {
             .single();
 
           if (settings && settings.enabled) {
+            const timezone = session.profiles?.timezone || 'Asia/Jakarta';
+            const intervalSeconds = settings.interval_seconds ?? settings.interval_minutes * 60;
+            const reminderTimes = (settings.reminder_times ?? ['07:00']) as string[];
+            const isDue = isReminderTimeDue(reminderTimes, intervalSeconds, new Date(), timezone);
+
+            if (!isDue) {
+              results.push({ user_id: session.user_id, status: detectedStatus, success: true, reminder: 'not_due' });
+              continue;
+            }
             // Hitung log hari ini
             const todayStart = new Date();
             todayStart.setHours(0, 0, 0, 0);
@@ -147,8 +195,8 @@ Deno.serve(async (req) => {
               let intervalOk = true;
               if (logs.length > 0) {
                 const lastSent = new Date(logs[0].sent_at).getTime();
-                const diffMin = (Date.now() - lastSent) / (1000 * 60);
-                if (diffMin < settings.interval_minutes) {
+                const diffSeconds = (Date.now() - lastSent) / 1000;
+                if (diffSeconds < intervalSeconds) {
                   intervalOk = false;
                 }
               }

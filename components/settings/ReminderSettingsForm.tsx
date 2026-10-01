@@ -11,24 +11,20 @@ const schema = z
   .object({
     enabled: z.boolean(),
     max_reminders_per_day: z.number().int().min(1).max(20),
-    interval_minutes: z.number().int().min(15).max(480),
-    active_start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM'),
-    active_end_time: z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM'),
+    interval_seconds: z.number().int().min(15).max(28_800),
+    reminder_times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/, 'Format waktu tidak valid')).min(1, 'Tambahkan minimal satu waktu reminder'),
     snooze_today: z.boolean(),
-  })
-  .refine((d) => d.active_start_time < d.active_end_time, {
-    message: 'Jam mulai harus lebih awal dari jam selesai',
-    path: ['active_end_time'],
   });
 
 type FormValues = z.infer<typeof schema>;
 
 const INTERVAL_OPTIONS = [
-  { value: 15, label: '15 menit' },
-  { value: 30, label: '30 menit' },
-  { value: 60, label: '1 jam' },
-  { value: 90, label: '1,5 jam' },
-  { value: 120, label: '2 jam' },
+  { value: 15, label: '15 detik (uji coba)' },
+  { value: 900, label: '15 menit' },
+  { value: 1800, label: '30 menit' },
+  { value: 3600, label: '1 jam' },
+  { value: 5400, label: '1,5 jam' },
+  { value: 7200, label: '2 jam' },
 ];
 
 interface Props {
@@ -38,13 +34,45 @@ interface Props {
 export default function ReminderSettingsForm({ initialSettings }: Props) {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [testingPush, setTestingPush] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [newReminderTime, setNewReminderTime] = useState('07:00');
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const isSnoozedToday = initialSettings.snooze_until === todayStr;
 
+  async function handleTestPush() {
+    setTestingPush(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/push/test', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setTestResult({
+          success: true,
+          message: `✓ Berhasil! Notifikasi telah dikirim ke ${data.sentToDevices || 1} perangkat terdaftar. Cek bilah notifikasi Anda.`,
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: data.error || 'Gagal mengirim notifikasi tes.',
+        });
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      setTestResult({
+        success: false,
+        message: error.message || 'Terjadi kesalahan saat memanggil API.',
+      });
+    } finally {
+      setTestingPush(false);
+    }
+  }
+
   const {
     register,
     handleSubmit,
+    setValue,
     watch,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
@@ -52,14 +80,23 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
     defaultValues: {
       enabled: initialSettings.enabled,
       max_reminders_per_day: initialSettings.max_reminders_per_day,
-      interval_minutes: initialSettings.interval_minutes,
-      active_start_time: initialSettings.active_start_time,
-      active_end_time: initialSettings.active_end_time,
+      interval_seconds: initialSettings.interval_seconds,
+      reminder_times: initialSettings.reminder_times,
       snooze_today: isSnoozedToday,
     },
   });
 
   const enabled = watch('enabled');
+  const reminderTimes = watch('reminder_times');
+
+  function addReminderTime() {
+    if (!newReminderTime || reminderTimes.includes(newReminderTime)) return;
+    setValue('reminder_times', [...reminderTimes, newReminderTime].sort(), { shouldValidate: true, shouldDirty: true });
+  }
+
+  function removeReminderTime(time: string) {
+    setValue('reminder_times', reminderTimes.filter((item) => item !== time), { shouldValidate: true, shouldDirty: true });
+  }
 
   async function onSubmit(values: FormValues) {
     setSaved(false);
@@ -69,6 +106,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...values,
+        reminder_times: [...new Set(values.reminder_times)].sort(),
         snooze_until: values.snooze_today ? todayStr : null,
       }),
     });
@@ -138,7 +176,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
             <select
               id="interval"
               className="input"
-              {...register('interval_minutes', { valueAsNumber: true })}
+              {...register('interval_seconds', { valueAsNumber: true })}
             >
               {INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -148,39 +186,33 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
             </select>
           </div>
 
-          {/* Jam aktif */}
+          {/* Waktu reminder */}
           <div className="card space-y-3">
-            <p className="label">Jam aktif reminder</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="start-time" className="text-xs text-text-muted mb-1 block">
-                  Mulai
-                </label>
-                <input
-                  id="start-time"
-                  type="time"
-                  className="input"
-                  {...register('active_start_time')}
-                />
-                {errors.active_start_time && (
-                  <p className="text-xs text-red-600 mt-1">{errors.active_start_time.message}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="end-time" className="text-xs text-text-muted mb-1 block">
-                  Selesai
-                </label>
-                <input
-                  id="end-time"
-                  type="time"
-                  className="input"
-                  {...register('active_end_time')}
-                />
-                {errors.active_end_time && (
-                  <p className="text-xs text-red-600 mt-1">{errors.active_end_time.message}</p>
-                )}
-              </div>
+            <div>
+              <p className="label">Waktu reminder</p>
+              <p className="text-xs text-text-muted mt-0.5">Tambahkan satu atau beberapa waktu yang berbeda. Waktu dapat dihapus kapan saja.</p>
             </div>
+            <div className="flex gap-2">
+              <input
+                id="reminder-time"
+                type="time"
+                step="1"
+                value={newReminderTime}
+                onChange={(event) => setNewReminderTime(event.target.value)}
+                className="input flex-1"
+                aria-label="Waktu reminder baru"
+              />
+              <button type="button" onClick={addReminderTime} className="btn-outline shrink-0">Tambah</button>
+            </div>
+            <ul className="space-y-2" aria-label="Daftar waktu reminder">
+              {reminderTimes.map((time) => (
+                <li key={time} className="flex items-center justify-between rounded-xl bg-bg px-3 py-2">
+                  <span className="text-sm font-medium text-text-primary">{time}</span>
+                  <button type="button" onClick={() => removeReminderTime(time)} className="text-sm font-medium text-red-600 min-h-11 px-2" aria-label={`Hapus waktu ${time}`}>Hapus</button>
+                </li>
+              ))}
+            </ul>
+            {errors.reminder_times && <p className="text-xs text-red-600">{errors.reminder_times.message}</p>}
           </div>
 
           {/* Snooze hari ini */}
@@ -226,6 +258,41 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       >
         {isSubmitting ? 'Menyimpan...' : 'Simpan Pengaturan'}
       </button>
+
+      {/* Bagian Uji Coba Reminder */}
+      <div className="card space-y-3 pt-4 border-t border-border mt-6">
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+            <span aria-hidden="true">🔔</span> Uji Coba Pengingat (Push Notification)
+          </h3>
+          <p className="text-xs text-text-secondary mt-1">
+            Kirimkan satu notifikasi uji coba langsung ke perangkat ini untuk memastikan suara dan banner reminder bekerja.
+          </p>
+        </div>
+
+        {testResult && (
+          <div
+            role="status"
+            className={`text-xs p-3 rounded-xl border ${
+              testResult.success
+                ? 'bg-green-50 text-green-700 border-green-200'
+                : 'bg-red-50 text-red-700 border-red-200'
+            }`}
+          >
+            {testResult.message}
+          </div>
+        )}
+
+        <button
+          type="button"
+          id="btn-test-push-notification"
+          onClick={handleTestPush}
+          disabled={testingPush}
+          className="btn-outline w-full text-xs font-semibold flex items-center justify-center gap-2"
+        >
+          {testingPush ? 'Mengirim notifikasi...' : '🚀 Kirim Tes Notifikasi ke HP/Browser'}
+        </button>
+      </div>
     </form>
   );
 }

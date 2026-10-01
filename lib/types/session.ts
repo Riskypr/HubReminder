@@ -27,5 +27,10 @@ export interface Profile {
   id: string;
   full_name: string | null;
   timezone: string; // default 'Asia/Makassar'
+  company_name?: string | null;
+  photo_url?: string | null;
+  internship_period?: string | null;
+  participant_status?: string | null;
+  maganghub_synced_at?: string | null;
   created_at: string;
 }

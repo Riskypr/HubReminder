@@ -13,7 +13,7 @@
 | State Management | Zustand | State ringan untuk UI (status, setting form) |
 | Form & Validasi | React Hook Form + Zod | Validasi form setting reminder & input sesi akun |
 | PWA | `next-pwa` (Workbox) + manifest.json + custom service worker (push handler) | Installable + terima push saat app tertutup |
-| Date/Time | date-fns + date-fns-tz | Perhitungan jeda reminder & jam aktif (timezone WIB) |
+| Date/Time | date-fns + date-fns-tz / `Intl` | Perhitungan jeda reminder & jadwal waktu pengguna |
 
 > **Catatan arsitektur penting:** Karena butuh proses berjalan otomatis di background (bukan saat user membuka app), sebagian besar logika inti (cek status, kirim notifikasi) **wajib berjalan di server (Supabase Edge Function terjadwal)**, bukan di client. Frontend Next.js berfungsi sebagai dashboard, halaman setting, dan penerima push notification.
 
@@ -103,9 +103,9 @@ Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard meng
          - class/indikator hijau → status = 'selesai'
       e. Simpan hasil ke tabel attendance_checks
       f. Jika status = 'belum_lapor':
-         - Baca reminder_settings user (max_per_hari, interval_menit, jam_aktif)
+         - Baca reminder_settings user (maksimum, interval detik, dan daftar waktu reminder)
          - Cek notification_logs hari ini: sudah berapa kali kirim & kapan terakhir
-         - Jika (jumlah terkirim < max) DAN (waktu sekarang - terakhir kirim ≥ interval) DAN (dalam jam aktif):
+         - Jika waktu sekarang berada dalam jendela interval setelah salah satu waktu yang dipilih dan jumlah belum mencapai maksimum:
              → kirim Web Push via pushService
              → catat ke notification_logs
       g. Jika status = 'selesai' → tidak ada reminder baru dikirim untuk hari itu
@@ -121,14 +121,19 @@ Service Worker (sw-push.ts) menerima event 'push'
 ### 4.4 Flow: Ubah Setting Reminder
 ```
 [ReminderSettingsForm] → reminderSettingsService.update(userId, settings)
-   → simpan ke tabel reminder_settings (upsert)
+   → simpan ke tabel reminder_settings (upsert), termasuk daftar waktu reminder
    → Edge Function otomatis membaca setting terbaru di eksekusi berikutnya (tanpa perlu restart job)
 ```
+
+Pengguna dapat memilih interval 15 detik untuk uji coba dan memasukkan waktu hingga presisi detik. Job pemanggil Edge Function harus berjalan minimal setiap 15 detik agar jendela ini terdeteksi; scheduler cron yang hanya berjalan per menit tidak dapat menghasilkan notifikasi setiap 15 detik.
 
 ## 5. Keamanan Data Sesi (Ringkasan — detail di `Rules.md`)
 - Cookie sesi dienkripsi sebelum disimpan (mis. via Supabase Vault/pgsodium atau `crypto.ts` dengan key server-only).
 - Row Level Security (RLS) aktif di semua tabel — user hanya bisa akses baris miliknya sendiri.
 - Tidak ada logging nilai cookie mentah di log server manapun.
+
+## 5.1 Reminder Grup WhatsApp
+`cron-job.org` memanggil `POST /api/cron/reminder` dengan header `X-Cron-Secret`. Endpoint memvalidasi secret secara constant-time, membaca sesi valid dan status attendance terakhir dari Supabase menggunakan `service_role`, lalu mengirim ringkasan melalui Foonte. Endpoint tidak memanggil MagangHub atau meneruskan cookie sesi, sehingga target eksekusi tetap singkat. Respons pengiriman disimpan di `reminder_logs`.
 
 ## 6. PWA & Push Notification Setup
 - `manifest.ts`: nama app, ikon, `display: standalone`, `theme_color`.

@@ -1,7 +1,9 @@
 // components/dashboard/StatusCard.tsx
-// Badge status utama di atas dashboard — warna + ikon + label teks (aksesibilitas)
+// Badge status utama di atas dashboard — warna + ikon + label teks + tombol cek sekarang
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 
 interface StatusCardProps {
@@ -9,6 +11,7 @@ interface StatusCardProps {
   lastCheckedAt: string | null; // ISO string
   sentToday: number;
   maxPerDay: number;
+  allowManualCheck?: boolean;
 }
 
 const STATUS_CONFIG: Record<
@@ -34,7 +37,7 @@ const STATUS_CONFIG: Record<
     label: 'Tidak Diketahui',
     badgeClass: 'badge-unknown',
     cardBg: 'border-l-4 border-l-status-unknown',
-    desc: 'Status tidak dapat ditentukan saat ini.',
+    desc: 'Belum ada status laporan hari ini. Klik "Cek Status" untuk memeriksa ke MagangHub.',
   },
   session_expired: {
     icon: '⚠️',
@@ -50,12 +53,58 @@ export default function StatusCard({
   lastCheckedAt,
   sentToday,
   maxPerDay,
+  allowManualCheck = true,
 }: StatusCardProps) {
-  const config = STATUS_CONFIG[status];
+  const router = useRouter();
+  const [currentStatus, setCurrentStatus] = useState<AttendanceStatus>(status);
+  const [currentLastChecked, setCurrentLastChecked] = useState<string | null>(lastCheckedAt);
+  const [checking, setChecking] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
 
-  const lastCheckedLabel = lastCheckedAt
-    ? formatRelativeTime(lastCheckedAt)
+  // Sinkronkan state lokal saat prop dari server berubah
+  useEffect(() => {
+    setCurrentStatus(status);
+  }, [status]);
+
+  useEffect(() => {
+    setCurrentLastChecked(lastCheckedAt);
+  }, [lastCheckedAt]);
+
+  const config = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.unknown;
+
+  const lastCheckedLabel = currentLastChecked
+    ? formatRelativeTime(currentLastChecked)
     : 'Belum pernah dicek';
+
+  async function handleCheckNow() {
+    setChecking(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/attendance/check', { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.status) {
+        setCurrentStatus(data.status);
+        if (data.checkedAt) {
+          setCurrentLastChecked(data.checkedAt);
+        }
+        const statusMsg =
+          data.status === 'selesai'
+            ? '✓ Status: Sudah Lapor'
+            : data.status === 'belum_lapor'
+            ? '✓ Status: Belum Lapor'
+            : '✓ Status diperbarui';
+        setFeedback(statusMsg);
+        router.refresh();
+      } else {
+        setFeedback(data?.error || 'Gagal mengecek status');
+      }
+    } catch {
+      setFeedback('Koneksi terganggu');
+    } finally {
+      setChecking(false);
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  }
 
   return (
     <div
@@ -65,26 +114,52 @@ export default function StatusCard({
       aria-label={`Status laporan: ${config.label}`}
     >
       {/* Badge status besar */}
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="text-4xl leading-none">
-          {config.icon}
-        </span>
-        <div>
-          <span className={config.badgeClass} role="img" aria-label={config.label}>
-            {config.label}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span aria-hidden="true" className="text-4xl leading-none">
+            {config.icon}
           </span>
-          <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-            {config.desc}
-          </p>
+          <div>
+            <span className={config.badgeClass} role="img" aria-label={config.label}>
+              {config.label}
+            </span>
+            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+              {config.desc}
+            </p>
+          </div>
         </div>
+
+        {allowManualCheck && currentStatus !== 'session_expired' && (
+          <button
+            onClick={handleCheckNow}
+            disabled={checking}
+            id="btn-check-attendance-now"
+            className="text-xs text-primary hover:text-primary-dark transition-colors px-2.5 py-1.5 rounded-md hover:bg-blue-50 disabled:opacity-50 shrink-0 font-medium flex items-center gap-1 border border-primary/20"
+            title="Cek status terkini langsung ke MagangHub"
+          >
+            <span className={`inline-block ${checking ? 'animate-spin' : ''}`}>🔄</span>
+            <span>{checking ? 'Mengecek...' : 'Cek Status'}</span>
+          </button>
+        )}
       </div>
+
+      {feedback && (
+        <p
+          role="status"
+          className={`text-xs ${
+            feedback.startsWith('✓') ? 'text-status-done font-medium' : 'text-red-500'
+          }`}
+        >
+          {feedback}
+        </p>
+      )}
 
       {/* Info terakhir dicek */}
       <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border">
         <span>
           <span className="font-medium">Terakhir dicek:</span> {lastCheckedLabel}
         </span>
-        {status === 'belum_lapor' && (
+        {currentStatus === 'belum_lapor' && (
           <span className="font-medium text-status-pending">
             {sentToday}/{maxPerDay} reminder terkirim
           </span>

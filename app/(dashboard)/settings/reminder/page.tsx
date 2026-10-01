@@ -3,10 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getReminderSettings } from '@/lib/services/reminderSettingsService';
 import ReminderSettingsForm from '@/components/settings/ReminderSettingsForm';
+import SettingsTabs from '@/components/settings/SettingsTabs';
 
 export const metadata = {
   title: 'Pengaturan Reminder — HubReminder',
-  description: 'Atur jumlah maksimum, interval, dan jam aktif reminder laporan harian.',
+  description: 'Atur jumlah maksimum, interval, dan waktu reminder laporan harian.',
 };
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ export default async function ReminderSettingsPage() {
 
   return (
     <div className="space-y-4">
+      <SettingsTabs />
       <h1 className="text-xl font-semibold text-text-primary">Pengaturan Reminder</h1>
       <ReminderSettingsForm initialSettings={settings} />
     </div>

@@ -19,17 +19,41 @@ export default function PermissionPrompt({
   async function handleEnable() {
     setLoading(true);
     setError(null);
+
     try {
+      if (!('Notification' in window)) {
+        throw new Error('Browser ini tidak mendukung notifikasi push.');
+      }
+
+      if (!('serviceWorker' in navigator)) {
+        throw new Error('Browser ini tidak mendukung Service Worker.');
+      }
+
+      // Validasi VAPID Public Key
+      const cleanKey = (vapidPublicKey || '').trim().replace(/['"]/g, '');
+      if (!cleanKey || cleanKey.startsWith('your-')) {
+        throw new Error(
+          'Kunci VAPID (NEXT_PUBLIC_VAPID_PUBLIC_KEY) belum dikonfigurasi di Environment Variables.'
+        );
+      }
+
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        setError('Izin notifikasi ditolak. Aktifkan lewat pengaturan browser.');
+        setError('Izin notifikasi ditolak. Anda dapat mengaktifkannya lewat pengaturan browser.');
         return;
       }
 
       const registration = await navigator.serviceWorker.ready;
+      if (!registration.pushManager) {
+        throw new Error('PushManager tidak tersedia pada browser ini.');
+      }
+
+      // Konversi VAPID key secara aman
+      const convertedVapidKey = urlBase64ToUint8Array(cleanKey);
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as unknown as BufferSource,
+        applicationServerKey: convertedVapidKey as unknown as BufferSource,
       });
 
       const subJSON = subscription.toJSON();
@@ -42,10 +66,14 @@ export default function PermissionPrompt({
         }),
       });
 
-      if (!res.ok) throw new Error('Gagal menyimpan subscription');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal menyimpan data subscription di server');
+      }
+
       onSubscribed?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mengaktifkan notifikasi');
     } finally {
       setLoading(false);
     }
@@ -61,7 +89,7 @@ export default function PermissionPrompt({
         Izinkan HubReminder mengirim pengingat laporan harian meski aplikasi ditutup.
       </p>
       {error && (
-        <p role="alert" className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+        <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-left">
           {error}
         </p>
       )}
@@ -77,10 +105,31 @@ export default function PermissionPrompt({
   );
 }
 
-/** Konversi VAPID public key dari base64url ke Uint8Array */
+/**
+ * Konversi VAPID public key dari base64url ke Uint8Array secara aman
+ */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+  const clean = base64String.trim().replace(/['"]/g, '');
+  if (!clean) {
+    throw new Error('VAPID Public Key kosong.');
+  }
+
+  // Tambahkan padding base64 jika diperlukan
+  const padding = '='.repeat((4 - (clean.length % 4)) % 4);
+  const base64 = (clean + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  try {
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  } catch {
+    throw new Error(
+      'Format VAPID Public Key tidak valid. Pastikan NEXT_PUBLIC_VAPID_PUBLIC_KEY adalah string base64url yang sah.'
+    );
+  }
 }

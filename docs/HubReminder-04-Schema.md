@@ -51,9 +51,9 @@ Pengaturan reminder per user (1 baris per user).
 | user_id | uuid | PK, FK → `profiles.id` |
 | enabled | boolean | default `true` |
 | max_reminders_per_day | int | default `5` |
-| interval_minutes | int | default `60` |
-| active_start_time | time | default `'07:00'` |
-| active_end_time | time | default `'21:00'` |
+| interval_seconds | int | default `3600`; minimum `15` untuk mode uji coba |
+| reminder_times | time[] | daftar waktu pengiriman pengguna, default `['07:00']`; dapat berisi lebih dari satu waktu |
+| interval_minutes | int | kolom kompatibilitas lama; nilai baru diturunkan dari `interval_seconds` |
 | snooze_until | date | nullable — jika diisi tanggal hari ini, reminder dilewati untuk hari itu |
 | updated_at | timestamptz | — |
 
@@ -107,7 +107,10 @@ create policy "user can read own checks"
 
 Pola yang sama diterapkan ke seluruh tabel: `select`/`update` untuk pemilik baris (`authenticated`), sedangkan `insert` dari job berkala dilakukan lewat `service_role` yang otomatis melewati RLS.
 
-## 5. Perhitungan Kuota Reminder (Logika, bukan tabel baru)
+## 5. Audit Reminder Grup Foonte
+Migration `20261001000003_add_reminder_logs.sql` menambahkan tabel `reminder_logs` untuk audit pengiriman ringkasan grup WhatsApp. Kolomnya adalah `sent_at`, `status` (`sent`/`failed`), `recipient`, `member_count`, `provider_status`, dan `provider_response`. RLS aktif tanpa policy publik; hanya webhook server dengan `service_role` yang menulisnya.
+
+## 6. Perhitungan Kuota Reminder (Logika, bukan tabel baru)
 Saat Edge Function berjalan, untuk menentukan apakah boleh kirim reminder baru:
 ```sql
 select count(*) as sent_today, max(sent_at) as last_sent
@@ -115,4 +118,4 @@ from notification_logs
 where user_id = :user_id
   and sent_at::date = current_date at time zone :user_timezone;
 ```
-Dibandingkan dengan `reminder_settings.max_reminders_per_day` dan `interval_minutes` untuk memutuskan kirim atau tidak (detail alur di `Architecture.md` §4.2).
+Dibandingkan dengan `reminder_settings.max_reminders_per_day`, `interval_seconds`, dan salah satu nilai `reminder_times` dalam zona waktu pengguna untuk memutuskan kirim atau tidak (detail alur di `Architecture.md` §4.2).

@@ -1,16 +1,42 @@
-// lib/services/historyService.ts
-// Ambil riwayat status attendance dan log notifikasi
-
 import { createClient } from '@/lib/supabase/server';
+import { isTodayInTz, DEFAULT_TIMEZONE } from '@/lib/utils/time';
 import type { AttendanceCheck } from '@/lib/types/attendance';
 import type { NotificationLog } from '@/lib/types/reminder';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * Ambil status hari ini (check terbaru).
+ * Ambil status hari ini (hanya jika record dicek pada hari ini di timezone user).
  */
 export async function getTodayStatus(
+  userId: string,
+  client?: SupabaseServerClient,
+  tz = DEFAULT_TIMEZONE
+): Promise<AttendanceCheck | null> {
+  const supabase = client ?? (await createClient());
+
+  const { data } = await supabase
+    .from('attendance_checks')
+    .select('*')
+    .eq('user_id', userId)
+    .order('checked_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  // Hanya anggap sebagai status hari ini jika tanggal dicek memang hari ini
+  if (!isTodayInTz(data.checked_at, tz)) {
+    return null;
+  }
+
+  return data as AttendanceCheck;
+}
+
+/**
+ * Ambil record pengecekan paling akhir tanpa memandang tanggal (untuk info "terakhir dicek").
+ */
+export async function getLatestStatusCheck(
   userId: string,
   client?: SupabaseServerClient
 ): Promise<AttendanceCheck | null> {
@@ -72,24 +98,25 @@ export async function getNotificationLogs(
  */
 export async function getTodayNotificationSummary(
   userId: string,
-  client?: SupabaseServerClient
+  client?: SupabaseServerClient,
+  tz = DEFAULT_TIMEZONE
 ): Promise<{
   sentToday: number;
   lastSentAt: string | null;
 }> {
   const supabase = client ?? (await createClient());
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
 
   const { data } = await supabase
     .from('notification_logs')
     .select('sent_at')
     .eq('user_id', userId)
-    .gte('sent_at', todayStart.toISOString())
-    .order('sent_at', { ascending: false });
+    .order('sent_at', { ascending: false })
+    .limit(50);
+
+  const logsToday = (data ?? []).filter((log) => isTodayInTz(log.sent_at, tz));
 
   return {
-    sentToday: data?.length ?? 0,
-    lastSentAt: data?.[0]?.sent_at ?? null,
+    sentToday: logsToday.length,
+    lastSentAt: logsToday[0]?.sent_at ?? null,
   };
 }

@@ -58,7 +58,7 @@
 | `StatusCard` | Card besar di top dashboard, badge warna sesuai status + label teks ("Belum Lapor" / "Sudah Lapor" / "Tidak Diketahui") | pending / done / unknown |
 | `LastCheckedInfo` | Teks kecil "Terakhir dicek 5 menit lalu" | — |
 | `ConnectAccountForm` | Form input cookie sesi + instruksi cara mengambilnya, indikator status koneksi | connected / disconnected / expired |
-| `ReminderSettingsForm` | Slider/stepper jumlah maksimum reminder, dropdown interval, time-range picker jam aktif, toggle aktif/nonaktif | — |
+| `ReminderSettingsForm` | Slider/stepper jumlah maksimum reminder, dropdown interval, daftar waktu yang dapat ditambah/hapus, toggle aktif/nonaktif | — |
 | `HistoryTimeline` | List riwayat status per hari (tanggal, badge status, jumlah reminder terkirim) | — |
 | `NotificationLogItem` | Baris log notifikasi: waktu kirim, status saat dikirim | — |
 | `SessionExpiredBanner` | Banner peringatan di atas dashboard saat sesi MagangHub perlu dihubungkan ulang | — |
@@ -96,8 +96,8 @@ Buka app → Dashboard
 ```
 Setting → Reminder
   → Atur: jumlah maksimum per hari (mis. 1–10x)
-  → Atur: interval antar reminder (15/30/60/90 menit, atau custom)
-  → Atur: jam aktif reminder boleh dikirim (mis. 07:00–21:00)
+  → Atur: interval antar reminder (termasuk 15 detik untuk uji coba)
+  → Tambahkan satu atau beberapa waktu reminder (mis. 07:00, 12:00, 17:00), atau hapus waktu yang tidak lagi diperlukan
   → Simpan → Toast sukses
 ```
 

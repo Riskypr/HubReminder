@@ -2,7 +2,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getSessionStatus } from '@/lib/services/accountService';
+import { getUserProfile } from '@/lib/services/profileService';
 import ConnectAccountForm from '@/components/settings/ConnectAccountForm';
+import SettingsTabs from '@/components/settings/SettingsTabs';
 
 export const metadata = {
   title: 'Hubungkan Akun — HubReminder',
@@ -19,12 +21,16 @@ export default async function AccountSettingsPage() {
 
   if (!user) redirect('/login');
 
-  const sessionInfo = await getSessionStatus(user.id, supabase);
+  const [sessionInfo, userProfile] = await Promise.all([
+    getSessionStatus(user.id, supabase),
+    getUserProfile(user.id, supabase),
+  ]);
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold text-text-primary">Akun MagangHub</h1>
-      <ConnectAccountForm currentSession={sessionInfo} />
+      <SettingsTabs />
+      <h1 className="text-xl font-semibold text-text-primary">Akun & Cookie MagangHub</h1>
+      <ConnectAccountForm currentSession={sessionInfo} currentProfile={userProfile} />
     </div>
   );
 }

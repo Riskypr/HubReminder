@@ -74,3 +74,6 @@ Buka browser pada `http://localhost:3000`.
 ```bash
 npm test
 ```
+
+### 6. Menjadwalkan Reminder Grup WhatsApp
+Pada cron-job.org, buat job `POST` ke `https://<domain>/api/cron/reminder` dan tambahkan header `X-Cron-Secret` dengan nilai yang sama seperti `CRON_SECRET_KEY`. Endpoint membaca status terakhir yang tersimpan di Supabase, mengirim ringkasan ke Foonte, lalu mencatat hasilnya ke `reminder_logs`. Jadwalkan misalnya pukul 07:00 WIB.

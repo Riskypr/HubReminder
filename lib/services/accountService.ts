@@ -15,7 +15,8 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 export async function saveSession(
   userId: string,
   rawCookie: string,
-  client?: SupabaseServerClient
+  client?: SupabaseServerClient,
+  initialStatus: SessionStatus = 'unverified'
 ): Promise<{ error: string | null }> {
   const supabase = client ?? (await createClient());
   const encrypted = await encryptCookie(rawCookie);
@@ -26,7 +27,7 @@ export async function saveSession(
       {
         user_id: userId,
         encrypted_cookie: encrypted,
-        status: 'unverified' as SessionStatus,
+        status: initialStatus,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' }
@@ -71,4 +72,33 @@ export async function deleteSession(
 
   if (error) return { error: error.message };
   return { error: null };
+}
+
+/**
+ * Mengambil dan mendekripsi cookie sesi MagangHub untuk keperluan Backend Proxy (SERVER ONLY).
+ * PENTING: Plaintext cookie TIDAK BOLEH dikembalikan ke response API/client.
+ */
+export async function getDecryptedSessionCookie(
+  userId: string,
+  client?: SupabaseServerClient
+): Promise<string | null> {
+  const supabase = client ?? (await createClient());
+
+  const { data, error } = await supabase
+    .from('maganghub_sessions')
+    .select('encrypted_cookie, status')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error || !data || !data.encrypted_cookie) {
+    return null;
+  }
+
+  try {
+    const { decryptCookie } = await import('@/lib/utils/crypto');
+    return await decryptCookie(data.encrypted_cookie);
+  } catch (err) {
+    console.error('Failed to decrypt session cookie:', err);
+    return null;
+  }
 }

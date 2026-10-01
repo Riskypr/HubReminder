@@ -9,6 +9,8 @@ const DEFAULT_SETTINGS: Omit<ReminderSettings, 'user_id' | 'updated_at'> = {
   enabled: true,
   max_reminders_per_day: 5,
   interval_minutes: 60,
+  interval_seconds: 3600,
+  reminder_times: ['07:00'],
   active_start_time: '07:00',
   active_end_time: '21:00',
   snooze_until: null,
@@ -37,7 +39,12 @@ export async function getReminderSettings(
       updated_at: new Date().toISOString(),
     };
   }
-  return data as ReminderSettings;
+  const settings = data as ReminderSettings & { reminder_times?: string[]; interval_seconds?: number };
+  return {
+    ...settings,
+    interval_seconds: settings.interval_seconds ?? settings.interval_minutes * 60,
+    reminder_times: settings.reminder_times?.length ? settings.reminder_times : ['07:00'],
+  };
 }
 
 /**
