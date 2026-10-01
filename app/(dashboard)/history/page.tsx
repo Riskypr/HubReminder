@@ -11,6 +11,8 @@ export const metadata = {
   description: 'Histori status laporan harian dan notifikasi yang terkirim.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function HistoryPage() {
   const supabase = await createClient();
   const {

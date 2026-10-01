@@ -9,6 +9,8 @@ export const metadata = {
   description: 'Atur jumlah maksimum, interval, dan jam aktif reminder laporan harian.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function ReminderSettingsPage() {
   const supabase = await createClient();
   const {

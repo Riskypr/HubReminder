@@ -1,11 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // PWA akan ditambah via next-pwa wrapper
-  experimental: {},
+  typescript: {
+    ignoreBuildErrors: false,
+  },
 };
 
-module.exports = {
-  allowedDevOrigins: ['10.62.1.16'],
-}
-
-// module.exports = nextConfig;
+module.exports = nextConfig;

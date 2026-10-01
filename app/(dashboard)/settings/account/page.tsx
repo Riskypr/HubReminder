@@ -9,6 +9,8 @@ export const metadata = {
   description: 'Hubungkan akun MagangHub agar HubReminder dapat memantau status laporan kamu.',
 };
 
+export const dynamic = 'force-dynamic';
+
 export default async function AccountSettingsPage() {
   const supabase = await createClient();
   const {
