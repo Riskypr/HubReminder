@@ -99,7 +99,10 @@ export async function fetchDashboard(cookiePlaintext: string, refreshToken: stri
           headers: {
             'User-Agent': headers['User-Agent'],
             'Accept': 'application/json, text/plain, */*',
-            'Cookie': refreshToken ? `${cookieHeader}; refresh_token=${refreshToken}` : cookieHeader,
+            'Cookie': refreshToken
+              ? `${cookieHeader}; monev_refresh_token=${refreshToken}; monev-refresh-token=${refreshToken}; refresh_token=${refreshToken}`
+              : cookieHeader,
+            ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
             'X-Frontend-Build-ID': MAGANGHUB_BUILD_ID,
           },
           signal: controller.signal,
