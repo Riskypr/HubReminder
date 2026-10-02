@@ -160,9 +160,18 @@ export default function StatusCard({
           <span className="font-medium">Terakhir dicek:</span> {lastCheckedLabel}
         </span>
         {currentStatus === 'belum_lapor' && (
-          <span className="font-medium text-status-pending">
-            {sentToday}/{maxPerDay} reminder terkirim
-          </span>
+          <div className="text-right text-status-pending">
+            <span className="font-medium">
+              {sentToday <= maxPerDay
+                ? `${sentToday}/${maxPerDay} reminder terkirim hari ini`
+                : `${sentToday} reminder sudah terkirim hari ini`}
+            </span>
+            {sentToday > maxPerDay && (
+              <p className="mt-0.5 text-[11px] text-text-muted">
+                Batas sekarang {maxPerDay}; tidak ada reminder tambahan hari ini.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
