@@ -43,6 +43,12 @@ export async function POST(request: NextRequest) {
     if (attendanceJobIdRaw && (!Number.isSafeInteger(attendanceJobId) || (attendanceJobId ?? 0) <= 0)) {
       return NextResponse.json({ error: 'CRON_JOB_ORG_ATTENDANCE_JOB_ID harus berupa bilangan bulat positif' }, { status: 500 });
     }
+    if (attendanceJobId && attendanceJobId === config.jobId) {
+      return NextResponse.json({
+        error: 'ID job reminder dan attendance tidak boleh sama',
+        detail: 'Atur CRON_JOB_ORG_JOB_ID dan CRON_JOB_ORG_ATTENDANCE_JOB_ID ke dua job cron yang berbeda sebelum sinkronisasi.',
+      }, { status: 409 });
+    }
     const reminderJob = await upsertCronJobOrgJob(
       createReminderCronJob(`${appUrl}/api/cron/reminder`, secret),
       config,

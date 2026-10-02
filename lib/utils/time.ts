@@ -5,7 +5,7 @@ import { format, formatDistanceToNow, parseISO, isToday } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
-export const DEFAULT_TIMEZONE = 'Asia/Makassar'; // WITA
+export const DEFAULT_TIMEZONE = 'Asia/Jakarta'; // WIB
 
 /**
  * Format tanggal ke "d MMM yyyy" (misal: "1 Okt 2026")
