@@ -113,7 +113,16 @@ async function handleReminder(request: NextRequest) {
     });
 
     if (!eligibleSessions.length) {
-      return NextResponse.json({ success: true, sent: false, reason: 'no_reminders_due' });
+      return NextResponse.json({
+        success: true,
+        sent: false,
+        reason: 'no_reminders_due',
+        activeSessions: sessionRows.length,
+        sessionsWithLatestCheck: latestStatusByUser.size,
+        sessionsStillUnreported: sessionRows.filter(
+          (session) => latestStatusByUser.get(session.user_id) === 'belum_lapor',
+        ).length,
+      });
     }
     const members: CronReminderMember[] = eligibleSessions.map((session) => ({
       name: session.profiles?.full_name?.trim() || 'Peserta MagangHub',
@@ -130,7 +139,13 @@ async function handleReminder(request: NextRequest) {
       provider_response: result.responseBody || null,
     });
     if (logError) throw new Error(`Gagal menyimpan log reminder: ${logError.message}`);
-    if (!result.ok) return NextResponse.json({ error: 'Foonte menolak pengiriman reminder' }, { status: 502 });
+    if (!result.ok) {
+      return NextResponse.json({
+        error: 'Foonte menolak pengiriman reminder',
+        providerStatus: result.status,
+        providerResponse: result.responseBody,
+      }, { status: 502 });
+    }
 
     const sentAt = new Date().toISOString();
     const { error: notificationLogError } = await supabase.from('notification_logs').insert(
@@ -152,7 +167,10 @@ async function handleReminder(request: NextRequest) {
     return NextResponse.json({ success: true, sent: true, recipients: members.length });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
-    return NextResponse.json({ error: 'Gagal menjalankan reminder' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Gagal menjalankan reminder',
+      detail: error instanceof Error ? error.message : 'Kesalahan tidak diketahui',
+    }, { status: 500 });
   }
 }
 
