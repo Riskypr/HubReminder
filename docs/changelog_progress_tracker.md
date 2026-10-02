@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Jadwalkan Checker Status melalui cron-job.org
+- **Added**: Endpoint `/api/cron/attendance` untuk memanggil Edge Function `check-attendance` dan job cron-job.org kedua dengan jadwal setiap 15 menit.
+- **Changed**: `/api/cron/reminder/configure` kini menyinkronkan job pemeriksaan status dan job pengiriman WA; respons checker diringkas agar data peserta tidak terekspos di riwayat cron-job.org.
+- **Deprecated/Removed**: Tidak ada.
+- **Notes for Next Agent**: Setelah deploy, panggil endpoint configure lagi lalu simpan kedua ID job sebagai `CRON_JOB_ORG_JOB_ID` dan `CRON_JOB_ORG_ATTENDANCE_JOB_ID` di Vercel. Pastikan Edge Function `check-attendance` sudah dideploy dan secrets-nya tersedia.
+
 ## [2026-10-02] - Hilangkan Ketergantungan Jam Aktif Lama
 - **Added**: Ringkasan dashboard menampilkan waktu reminder yang dipilih pengguna.
 - **Changed**: Evaluator reminder mengikuti `reminder_times` dan `interval_seconds`; `active_start_time`/`active_end_time` lama tidak lagi menyaring jadwal.

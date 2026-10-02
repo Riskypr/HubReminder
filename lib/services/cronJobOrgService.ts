@@ -67,6 +67,28 @@ export function createReminderCronJob(url: string, secret: string): CronJobOrgJo
   };
 }
 
+/** Job pemutakhiran cache status laporan sebelum reminder grup dikirim. */
+export function createAttendanceCheckCronJob(url: string, secret: string): CronJobOrgJob {
+  return {
+    enabled: true,
+    title: 'HubReminder - Periksa Status Laporan',
+    url,
+    saveResponses: true,
+    requestMethod: 1,
+    requestTimeout: 120,
+    schedule: {
+      timezone: process.env.CRON_REMINDER_TIMEZONE ?? 'Asia/Jakarta',
+      hours: [-1],
+      minutes: [0, 15, 30, 45],
+      mdays: [-1],
+      months: [-1],
+      wdays: [-1],
+      expiresAt: 0,
+    },
+    extendedData: { headers: { 'X-Cron-Secret': secret } },
+  };
+}
+
 /** Buat job baru atau perbarui job yang ID-nya tersimpan di environment. */
 export async function upsertCronJobOrgJob(
   job: CronJobOrgJob,

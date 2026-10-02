@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createReminderCronJob, upsertCronJobOrgJob } from '@/lib/services/cronJobOrgService';
+import { createAttendanceCheckCronJob, createReminderCronJob, upsertCronJobOrgJob } from '@/lib/services/cronJobOrgService';
 
 describe('cron-job.org service', () => {
   it('membuat payload POST per menit dengan header rahasia', () => {
@@ -8,6 +8,16 @@ describe('cron-job.org service', () => {
       url: 'https://app.example.com/api/cron/reminder',
       requestMethod: 1,
       schedule: { timezone: 'Asia/Jakarta', hours: [-1], minutes: [-1] },
+      extendedData: { headers: { 'X-Cron-Secret': 'rahasia' } },
+    });
+  });
+
+  it('membuat payload pemeriksaan status setiap 15 menit', () => {
+    const job = createAttendanceCheckCronJob('https://app.example.com/api/cron/attendance', 'rahasia');
+    expect(job).toMatchObject({
+      url: 'https://app.example.com/api/cron/attendance',
+      requestMethod: 1,
+      schedule: { timezone: 'Asia/Jakarta', hours: [-1], minutes: [0, 15, 30, 45] },
       extendedData: { headers: { 'X-Cron-Secret': 'rahasia' } },
     });
   });

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  createAttendanceCheckCronJob,
   createReminderCronJob,
   getCronJobOrgConfig,
   upsertCronJobOrgJob,
@@ -37,11 +38,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await upsertCronJobOrgJob(
+    const attendanceJobIdRaw = process.env.CRON_JOB_ORG_ATTENDANCE_JOB_ID;
+    const attendanceJobId = attendanceJobIdRaw ? Number(attendanceJobIdRaw) : undefined;
+    if (attendanceJobIdRaw && (!Number.isSafeInteger(attendanceJobId) || (attendanceJobId ?? 0) <= 0)) {
+      return NextResponse.json({ error: 'CRON_JOB_ORG_ATTENDANCE_JOB_ID harus berupa bilangan bulat positif' }, { status: 500 });
+    }
+    const reminderJob = await upsertCronJobOrgJob(
       createReminderCronJob(`${appUrl}/api/cron/reminder`, secret),
       config,
     );
-    return NextResponse.json({ success: true, ...result });
+    const attendanceJob = await upsertCronJobOrgJob(
+      createAttendanceCheckCronJob(`${appUrl}/api/cron/attendance`, secret),
+      { apiKey: config.apiKey, ...(attendanceJobId ? { jobId: attendanceJobId } : {}) },
+    );
+    return NextResponse.json({ success: true, ...reminderJob, attendanceJob });
   } catch (error) {
     console.error('[cron/reminder/configure] gagal menyinkronkan job:', error);
     return NextResponse.json({ error: 'Gagal menyinkronkan job cron-job.org' }, { status: 502 });
