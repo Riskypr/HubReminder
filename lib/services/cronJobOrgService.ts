@@ -34,8 +34,10 @@ export function getCronJobOrgConfig(): CronJobOrgConfig | null {
   if (!apiKey) return null;
 
   const rawJobId = process.env.CRON_JOB_ORG_JOB_ID;
-  const jobId = rawJobId ? Number(rawJobId) : undefined;
-  if (rawJobId && (!Number.isSafeInteger(jobId) || jobId <= 0)) {
+  if (!rawJobId) return { apiKey };
+
+  const jobId = Number(rawJobId);
+  if (!Number.isSafeInteger(jobId) || jobId <= 0) {
     throw new Error('CRON_JOB_ORG_JOB_ID harus berupa bilangan bulat positif');
   }
   return { apiKey, jobId };

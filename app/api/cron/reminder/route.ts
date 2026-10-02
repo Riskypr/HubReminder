@@ -37,7 +37,10 @@ function localDateAndSeconds(date: Date, timezone: string) {
 function isReminderTimeDue(times: string[], intervalSeconds: number, now: Date, timezone: string) {
   const nowSeconds = localDateAndSeconds(now, timezone).seconds;
   return times.some((time) => {
-    const [hour, minute, second = '0'] = time.split(':').map(Number);
+    const [hourPart, minutePart, secondPart] = time.split(':');
+    const hour = Number(hourPart);
+    const minute = Number(minutePart);
+    const second = secondPart === undefined ? 0 : Number(secondPart);
     const scheduledSeconds = hour * 3600 + minute * 60 + second;
     return nowSeconds >= scheduledSeconds && nowSeconds - scheduledSeconds < intervalSeconds;
   });
