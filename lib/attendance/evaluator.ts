@@ -2,7 +2,7 @@
 // Logika evaluasi apakah push notification layak dikirim ke pengguna
 
 import type { ReminderSettings, NotificationLog } from '@/lib/types/reminder';
-import { isWithinActiveHours, DEFAULT_TIMEZONE } from '@/lib/utils/time';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/time';
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
@@ -40,13 +40,24 @@ export function evaluateReminder({
     return { shouldSend: false, reason: 'snoozed_for_today' };
   }
 
-  // 3. Cek apakah berada dalam rentang jam aktif
-  const currentHHmm = format(zonedCurrent, 'HH:mm');
-  if (
-    currentHHmm < settings.active_start_time ||
-    currentHHmm > settings.active_end_time
-  ) {
-    return { shouldSend: false, reason: 'outside_active_hours' };
+  // 3. Cek jadwal yang dipilih pengguna; rentang jam lama tidak dipakai.
+  const timeParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(currentTime);
+  const partValue = (type: Intl.DateTimeFormatPartTypes) => Number(timeParts.find((part) => part.type === type)?.value ?? 0);
+  const currentSeconds = partValue('hour') * 3600 + partValue('minute') * 60 + partValue('second');
+  const intervalSeconds = settings.interval_seconds ?? settings.interval_minutes * 60;
+  const isScheduledTime = (settings.reminder_times?.length ? settings.reminder_times : ['07:00']).some((time) => {
+    const [hourPart, minutePart, secondPart] = time.split(':');
+    const scheduledSeconds = Number(hourPart) * 3600 + Number(minutePart) * 60 + Number(secondPart ?? 0);
+    return currentSeconds >= scheduledSeconds && currentSeconds - scheduledSeconds < intervalSeconds;
+  });
+  if (!isScheduledTime) {
+    return { shouldSend: false, reason: 'outside_reminder_schedule' };
   }
 
   // 4. Cek apakah sudah mencapai kuota maksimum hari ini

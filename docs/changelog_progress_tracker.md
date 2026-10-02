@@ -6,6 +6,18 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Hilangkan Ketergantungan Jam Aktif Lama
+- **Added**: Ringkasan dashboard menampilkan waktu reminder yang dipilih pengguna.
+- **Changed**: Evaluator reminder mengikuti `reminder_times` dan `interval_seconds`; `active_start_time`/`active_end_time` lama tidak lagi menyaring jadwal.
+- **Deprecated/Removed**: Tidak ada kolom lama yang dihapus dari database.
+- **Notes for Next Agent**: Jalur cron WA memeriksa `reminder_times`. Terapkan migration kanal notification di bawah ini dan deploy agar log push tidak menahan reminder WA.
+
+## [2026-10-02] - Pisahkan Kuota Reminder WhatsApp dan Push
+- **Added**: Kolom `channel` pada `notification_logs` melalui migration `20261002000005_add_notification_channel.sql`, dengan indeks untuk riwayat per kanal dan pengguna.
+- **Changed**: Evaluasi reminder WA kini hanya menghitung log kanal `whatsapp`; pengiriman WA juga ditulis dengan kanal tersebut. Endpoint membaca timezone peserta dari profil.
+- **Deprecated/Removed**: Tidak ada.
+- **Notes for Next Agent**: Terapkan migration `20261002000005` di Supabase dan deploy ulang. Sebelum migration aktif, query endpoint WA akan gagal karena kolom `channel` belum ada.
+
 ## [2026-10-02] - Polling Reminder melalui cron-job.org
 - **Added**: Pemeriksaan kelayakan reminder WhatsApp per peserta pada setiap pemanggilan cron.
 - **Changed**: Job cron-job.org berjalan setiap menit; endpoint hanya menyertakan peserta dengan status `belum_lapor` yang memenuhi jadwal, interval, kuota harian, dan aturan snooze. Pengiriman yang berhasil juga masuk ke `notification_logs` agar kuota dan interval dipakai bersama jalur reminder lainnya. Dokumentasi setup diperbarui.

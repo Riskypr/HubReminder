@@ -133,9 +133,9 @@ export default async function DashboardPage() {
               <span className="font-medium text-text-primary">setiap {reminderSettings.interval_minutes} menit</span>
             </div>
             <div className="flex justify-between">
-              <span>Jam aktif</span>
-              <span className="font-medium text-text-primary">
-                {reminderSettings.active_start_time} – {reminderSettings.active_end_time}
+              <span>Waktu reminder</span>
+              <span className="font-medium text-text-primary text-right">
+                {reminderSettings.reminder_times.join(', ')}
               </span>
             </div>
           </div>

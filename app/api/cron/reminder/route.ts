@@ -66,7 +66,7 @@ async function handleReminder(request: NextRequest) {
     const supabase = createAdminClient();
     const { data: sessions, error: sessionError } = await supabase
       .from('maganghub_sessions')
-      .select('user_id, profiles(full_name)')
+      .select('user_id, profiles(full_name, timezone)')
       .eq('status', 'valid');
     if (sessionError) throw new Error(`Gagal mengambil sesi aktif: ${sessionError.message}`);
     if (!sessions?.length) {
@@ -92,6 +92,7 @@ async function handleReminder(request: NextRequest) {
     const settingsByUser = new Map((settingsData ?? []).map((settings) => [settings.user_id, settings as SettingsRow]));
     const { data: notificationData, error: notificationError } = await supabase
       .from('notification_logs').select('user_id, sent_at')
+      .eq('channel', 'whatsapp')
       .in('user_id', sessionRows.map((session) => session.user_id));
     if (notificationError) throw new Error(`Gagal mengambil riwayat reminder: ${notificationError.message}`);
     const notificationRows = (notificationData ?? []) as NotificationRow[];
@@ -137,7 +138,13 @@ async function handleReminder(request: NextRequest) {
         const previousCount = notificationRows.filter((log) => log.user_id === session.user_id &&
           localDateAndSeconds(new Date(log.sent_at), session.profiles?.timezone || 'Asia/Jakarta').date ===
           localDateAndSeconds(new Date(sentAt), session.profiles?.timezone || 'Asia/Jakarta').date).length;
-        return { user_id: session.user_id, sent_at: sentAt, status_at_send: 'belum_lapor', sequence_today: previousCount + 1 };
+        return {
+          user_id: session.user_id,
+          sent_at: sentAt,
+          status_at_send: 'belum_lapor',
+          sequence_today: previousCount + 1,
+          channel: 'whatsapp',
+        };
       })
     );
     if (notificationLogError) throw new Error(`Gagal menyimpan riwayat pengiriman reminder: ${notificationLogError.message}`);

@@ -50,9 +50,7 @@ VAPID_SUBJECT=mailto:admin@domain.com
 > **Tip Generate VAPID Key**: Jalankan `npx web-push generate-vapid-keys` untuk menghasilkan pasangan kunci VAPID.
 
 ### 2. Jalankan Database Migrations di Supabase
-Buka **SQL Editor** pada dashboard Supabase Anda, lalu eksekusi isi dari:
-1. `supabase/migrations/20261001000000_initial_schema.sql` (Membuat tabel, fungsi trigger, dan Row Level Security).
-2. `supabase/migrations/20261001000001_cron_schedule.sql` (Konfigurasi jadwal pg_cron untuk menjalankan edge function berkala).
+Buka **SQL Editor** pada dashboard Supabase Anda, lalu eksekusi seluruh file di `supabase/migrations/` sesuai urutan nama file. Migration terbaru, `20261002000005_add_notification_channel.sql`, diperlukan agar riwayat reminder WhatsApp tidak dihitung sebagai riwayat notifikasi push.
 
 ### 3. Deploy Supabase Edge Function
 Jika menggunakan Supabase CLI:
