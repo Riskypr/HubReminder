@@ -15,6 +15,11 @@ const MAGANGHUB_API_BASE = 'https://monev-api.maganghub.kemnaker.go.id/api/v1';
 const MAGANGHUB_FRONTEND_BUILD_ID = 'fdce5864ab936c3205233ffc340ba593c0136cd2-production';
 const TIMEOUT_MS = 12000;
 const LOGIN_TIMEOUT_MS = 30000;
+// SIAPKerja menempatkan WAF di depan halaman autentikasi. Gunakan header yang
+// konsisten pada request halaman dan request XHR agar cookie challenge yang
+// diterbitkan pada langkah pertama tetap berlaku pada langkah berikutnya.
+const SIAPKERJA_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
+const SIAPKERJA_ACCEPT_LANGUAGE = 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7';
 
 export interface MagangHubUserData {
   id?: number | string;
@@ -45,10 +50,39 @@ function isOfficialKemnakerUrl(url: URL): boolean {
     (url.hostname === 'kemnaker.go.id' || url.hostname.endsWith('.kemnaker.go.id'));
 }
 
+export function splitSetCookieHeader(header: string): string[] {
+  const cookies: string[] = [];
+  let start = 0;
+  let inExpiresAttribute = false;
+
+  for (let index = 0; index < header.length; index += 1) {
+    if (header.slice(index, index + 8).toLowerCase() === 'expires=') {
+      inExpiresAttribute = true;
+      index += 7;
+      continue;
+    }
+    if (header[index] === ';' && inExpiresAttribute) {
+      inExpiresAttribute = false;
+      continue;
+    }
+    if (header[index] === ',' && !inExpiresAttribute && /^\s*[^=;,\s]+=/u.test(header.slice(index + 1))) {
+      cookies.push(header.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+
+  const finalCookie = header.slice(start).trim();
+  if (finalCookie) cookies.push(finalCookie);
+  return cookies;
+}
+
 function getSetCookies(response: Response): string[] {
   if (typeof response.headers.getSetCookie === 'function') return response.headers.getSetCookie();
   const setCookie = response.headers.get('set-cookie');
-  return setCookie ? [setCookie] : [];
+  // `Headers.get()` pada beberapa runtime Node menggabungkan banyak Set-Cookie
+  // menjadi satu string. Pecah hanya pada awal cookie baru; tanggal `Expires`
+  // mengandung koma dan tidak boleh dipisahkan.
+  return setCookie ? splitSetCookieHeader(setCookie) : [];
 }
 
 function addResponseCookies(jar: SessionCookie[], response: Response, responseUrl: URL): void {
@@ -133,7 +167,8 @@ async function followSsoRedirect(
       method: 'GET',
       headers: {
         Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
-        'User-Agent': 'HubReminder/1.0',
+        'Accept-Language': SIAPKERJA_ACCEPT_LANGUAGE,
+        'User-Agent': SIAPKERJA_USER_AGENT,
         ...(cookieHeaderForUrl(cookieJar, currentUrl) ? { Cookie: cookieHeaderForUrl(cookieJar, currentUrl) } : {}),
       },
       redirect: 'manual',
@@ -173,13 +208,18 @@ async function loginThroughKemnakerSso(
     method: 'GET',
     headers: {
       Accept: 'text/html,application/xhtml+xml',
-      'User-Agent': 'HubReminder/1.0',
+      'Accept-Language': SIAPKERJA_ACCEPT_LANGUAGE,
+      'Cache-Control': 'no-cache',
+      'User-Agent': SIAPKERJA_USER_AGENT,
     },
     redirect: 'manual',
     signal,
   });
   addResponseCookies(cookieJar, loginPage, loginUrl);
   if (!loginPage.ok) {
+    if (loginPage.status === 403) {
+      return { error: 'Halaman login SIAPKerja ditolak oleh proteksi server (HTTP 403). Coba lagi beberapa saat; jika berulang, autentikasi otomatis sedang diblokir oleh SIAPKerja.' };
+    }
     return { error: `Halaman login SIAPKerja merespons HTTP ${loginPage.status}.` };
   }
   const csrfToken = getCsrfToken(await loginPage.text());
@@ -191,11 +231,13 @@ async function loginThroughKemnakerSso(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Accept: 'application/json',
+      Accept: 'application/json, text/plain, */*',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': csrfToken,
+      Origin: loginUrl.origin,
       Referer: loginUrl.toString(),
-      'User-Agent': 'HubReminder/1.0',
+      'Accept-Language': SIAPKERJA_ACCEPT_LANGUAGE,
+      'User-Agent': SIAPKERJA_USER_AGENT,
       Cookie: cookieHeaderForUrl(cookieJar, loginUrl),
     },
     body: JSON.stringify({ username: email, password }),
@@ -207,6 +249,9 @@ async function loginThroughKemnakerSso(
   const redirectUri = payload?.data?.redirect_uri;
   if (!response.ok) {
     const message = payload?.errors?.username?.[0] ?? payload?.message;
+    if (response.status === 403) {
+      return { error: 'Login SIAPKerja ditolak oleh proteksi server (HTTP 403), bukan otomatis berarti akun atau kata sandi salah. Coba lagi beberapa saat.' };
+    }
     if (response.status === 401 || response.status === 422) {
       return { error: typeof message === 'string' ? message : 'Akun SIAPKerja atau kata sandi tidak dapat diverifikasi.' };
     }

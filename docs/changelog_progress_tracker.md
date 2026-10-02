@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Hardening Login SIAPKerja terhadap Proteksi Upstream
+- **Added**: Header request konsisten untuk halaman login dan XHR SIAPKerja, serta pesan diagnostik khusus saat halaman atau submit login ditolak HTTP 403.
+- **Changed**: Parser `Set-Cookie` fallback kini memisahkan beberapa cookie dengan aman, sehingga cookie sesi Laravel dan cookie proteksi upstream sama-sama diteruskan ke request login.
+- **Deprecated/Removed**: Tidak ada.
+- **Notes for Next Agent**: Jika 403 tetap berulang setelah deploy, upstream kemungkinan memblokir autentikasi server-to-server; HubReminder memerlukan endpoint integrasi resmi atau mekanisme otorisasi yang disediakan Kemnaker, bukan endpoint API lama `/api/v1/auth/login` (saat ini 404).
+
 ## [2026-10-02] - Redesign UI dan Login Kredensial MagangHub
 - **Added**: Endpoint proxy `POST /api/maganghub/login`, penyimpanan access/refresh token terenkripsi, migration `20261002000008_maganghub_credential_sessions.sql`, `ToastProvider`, ikon Lucide, dan formatter periode magang Indonesia.
 - **Changed**: Form penghubung akun tidak lagi menerima cookie manual; checker Edge Function menggunakan dan memperbarui token hasil refresh. Tampilan login, dashboard, navigasi, riwayat, dan pengaturan memakai layout mobile-first dengan feedback Toastify. Untuk SIAPKerja, proxy kini mengambil CSRF dan cookie awal, mengirim `{ username, password }`, lalu mengikuti redirect SSO. Resolver login menerima URL penuh atau path; pesan HTTP membedakan endpoint/format yang salah dari kredensial yang ditolak.
