@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Selaraskan Pengaturan Reminder dengan Cron
+- **Changed**: Input waktu reminder memakai presisi menit (HH:MM) dan nilai lama dengan detik dinormalisasi saat ditampilkan/disimpan.
+- **Changed**: Interval 15 detik dihapus; pilihan baru mencakup 3 dan 4 jam, dengan validasi API dan constraint database yang sejalan.
+- **Added**: Migration `20261002000007_cron_reminder_precision_and_intervals.sql` menormalkan data waktu lama dan mengganti nilai 15 detik menjadi 15 menit.
+- **Notes for Next Agent**: Terapkan migration baru di Supabase sebelum memilih interval 3 atau 4 jam.
+
 ## [2026-10-02] - Diagnostik Checker Attendance
 - **Added**: Respons endpoint checker membedakan Edge Function yang belum ditemukan (HTTP 404) dari kegagalan pemeriksaan lain.
 - **Changed**: Kegagalan upstream kini mengembalikan kode HTTP checker agar riwayat cron lebih mudah didiagnosis.

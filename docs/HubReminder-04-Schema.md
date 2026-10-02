@@ -51,8 +51,8 @@ Pengaturan reminder per user (1 baris per user).
 | user_id | uuid | PK, FK → `profiles.id` |
 | enabled | boolean | default `true` |
 | max_reminders_per_day | int | default `5` |
-| interval_seconds | int | default `3600`; minimum `15` untuk mode uji coba |
-| reminder_times | time[] | daftar waktu pengiriman pengguna, default `['07:00']`; dapat berisi lebih dari satu waktu |
+| interval_seconds | int | default `3600`; valid values `900`, `1800`, `3600`, `5400`, `7200`, `10800`, `14400` |
+| reminder_times | time[] | waktu pengiriman pada presisi menit dalam zona waktu pengguna, default `['07:00']`; dapat berisi lebih dari satu waktu |
 | interval_minutes | int | kolom kompatibilitas lama; nilai baru diturunkan dari `interval_seconds` |
 | snooze_until | date | nullable — jika diisi tanggal hari ini, reminder dilewati untuk hari itu |
 | updated_at | timestamptz | — |

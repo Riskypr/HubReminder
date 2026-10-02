@@ -96,8 +96,8 @@ Buka app → Dashboard
 ```
 Setting → Reminder
   → Atur: jumlah maksimum per hari (mis. 1–10x)
-  → Atur: interval antar reminder (termasuk 15 detik untuk uji coba)
-  → Tambahkan satu atau beberapa waktu reminder (mis. 07:00, 12:00, 17:00), atau hapus waktu yang tidak lagi diperlukan
+  → Atur: interval antar reminder (15/30 menit, 1/1,5/2/3/4 jam)
+  → Tambahkan satu atau beberapa waktu reminder (format HH:MM; cron memeriksa setiap menit), atau hapus waktu yang tidak lagi diperlukan
   → Simpan → Toast sukses
 ```
 

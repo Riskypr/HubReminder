@@ -125,7 +125,7 @@ Service Worker (sw-push.ts) menerima event 'push'
    → Edge Function otomatis membaca setting terbaru di eksekusi berikutnya (tanpa perlu restart job)
 ```
 
-Pengguna dapat memilih interval 15 detik untuk uji coba dan memasukkan waktu hingga presisi detik. Job pemanggil Edge Function harus berjalan minimal setiap 15 detik agar jendela ini terdeteksi; scheduler cron yang hanya berjalan per menit tidak dapat menghasilkan notifikasi setiap 15 detik.
+Pengguna memilih waktu reminder dengan presisi menit (HH:MM) karena cron-job.org memanggil endpoint setiap menit. Interval yang tersedia adalah 15/30 menit serta 1/1,5/2/3/4 jam; interval 15 detik tidak digunakan karena tidak dapat dijamin oleh scheduler per menit.
 
 ## 5. Keamanan Data Sesi (Ringkasan — detail di `Rules.md`)
 - Cookie sesi dienkripsi sebelum disimpan (mis. via Supabase Vault/pgsodium atau `crypto.ts` dengan key server-only).

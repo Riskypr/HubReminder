@@ -5,27 +5,36 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useState } from 'react';
-import type { ReminderSettings } from '@/lib/types/reminder';
+import {
+  REMINDER_INTERVAL_OPTIONS,
+  REMINDER_INTERVAL_SECONDS,
+  type ReminderSettings,
+} from '@/lib/types/reminder';
+
+function normalizeReminderTime(time: string) {
+  const [hour = '00', minute = '00'] = time.split(':');
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+}
+
+function normalizeInterval(seconds: number) {
+  return REMINDER_INTERVAL_SECONDS.includes(seconds as (typeof REMINDER_INTERVAL_SECONDS)[number])
+    ? seconds
+    : 900;
+}
 
 const schema = z
   .object({
     enabled: z.boolean(),
     max_reminders_per_day: z.number().int().min(1).max(20),
-    interval_seconds: z.number().int().min(15).max(28_800),
-    reminder_times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/, 'Format waktu tidak valid')).min(1, 'Tambahkan minimal satu waktu reminder'),
+    interval_seconds: z.number().int().refine(
+      (value) => REMINDER_INTERVAL_SECONDS.includes(value as (typeof REMINDER_INTERVAL_SECONDS)[number]),
+      'Pilih interval yang tersedia',
+    ),
+    reminder_times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Gunakan format jam dan menit (HH:MM)')).min(1, 'Tambahkan minimal satu waktu reminder'),
     snooze_today: z.boolean(),
   });
 
 type FormValues = z.infer<typeof schema>;
-
-const INTERVAL_OPTIONS = [
-  { value: 15, label: '15 detik (uji coba)' },
-  { value: 900, label: '15 menit' },
-  { value: 1800, label: '30 menit' },
-  { value: 3600, label: '1 jam' },
-  { value: 5400, label: '1,5 jam' },
-  { value: 7200, label: '2 jam' },
-];
 
 interface Props {
   initialSettings: ReminderSettings;
@@ -80,8 +89,8 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
     defaultValues: {
       enabled: initialSettings.enabled,
       max_reminders_per_day: initialSettings.max_reminders_per_day,
-      interval_seconds: initialSettings.interval_seconds,
-      reminder_times: initialSettings.reminder_times,
+      interval_seconds: normalizeInterval(initialSettings.interval_seconds),
+      reminder_times: [...new Set(initialSettings.reminder_times.map(normalizeReminderTime))].sort(),
       snooze_today: isSnoozedToday,
     },
   });
@@ -106,7 +115,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...values,
-        reminder_times: [...new Set(values.reminder_times)].sort(),
+        reminder_times: [...new Set(values.reminder_times.map(normalizeReminderTime))].sort(),
         snooze_until: values.snooze_today ? todayStr : null,
       }),
     });
@@ -173,12 +182,15 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
             <label htmlFor="interval" className="label">
               Interval antar reminder
             </label>
+            <p className="text-xs text-text-muted">
+              Cron memeriksa setiap menit. Interval adalah jarak minimum antar pengiriman pada waktu yang dipilih.
+            </p>
             <select
               id="interval"
               className="input"
               {...register('interval_seconds', { valueAsNumber: true })}
             >
-              {INTERVAL_OPTIONS.map((opt) => (
+              {REMINDER_INTERVAL_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -190,13 +202,13 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
           <div className="card space-y-3">
             <div>
               <p className="label">Waktu reminder</p>
-              <p className="text-xs text-text-muted mt-0.5">Tambahkan satu atau beberapa waktu yang berbeda. Waktu dapat dihapus kapan saja.</p>
+              <p className="text-xs text-text-muted mt-0.5">Cron memeriksa setiap menit, jadi waktu reminder menggunakan format HH:MM. Tambahkan satu atau beberapa waktu.</p>
             </div>
             <div className="flex gap-2">
               <input
                 id="reminder-time"
                 type="time"
-                step="1"
+                step="60"
                 value={newReminderTime}
                 onChange={(event) => setNewReminderTime(event.target.value)}
                 className="input flex-1"

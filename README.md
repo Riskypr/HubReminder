@@ -10,7 +10,7 @@ Aplikasi web mobile-first (PWA) berbasis Next.js dan Supabase untuk memantau sta
 - 🔔 **Pengingat Push Notification (PWA)**: Notifikasi dikirimkan ke perangkat meski browser atau aplikasi tertutup (Web Push API + Service Worker).
 - ⚙️ **Pengaturan Fleksibel**:
   - Jumlah maksimum pengingat per hari (1–10x).
-  - Interval antar pengingat (15, 30, 60, 90, 120 menit).
+  - Interval antar pengingat (15/30 menit, 1/1,5/2/3/4 jam).
   - Rentang jam aktif pengingat (misal 07:00 – 21:00).
   - Fitur tunda (snooze) satu hari.
 - 🕒 **Riwayat & Log**: Histori status harian dan riwayat notifikasi yang telah terkirim.
@@ -81,4 +81,4 @@ curl -X POST https://<domain>/api/cron/reminder/configure \
   -H "X-Cron-Secret: <nilai-CRON_SECRET_KEY>"
 ```
 
-Respons berisi `jobId` untuk pengiriman reminder dan `attendanceJob.jobId` untuk pemeriksaan status. Simpan masing-masing sebagai `CRON_JOB_ORG_JOB_ID` dan `CRON_JOB_ORG_ATTENDANCE_JOB_ID` di environment Vercel, lalu jalankan konfigurasi kembali. Job pemeriksaan status memanggil `/api/cron/attendance` setiap 15 menit; job reminder memanggil `/api/cron/reminder` setiap menit. Keduanya memakai header `X-Cron-Secret`. Endpoint reminder memeriksa waktu reminder, interval, kuota harian, snooze, dan cache status laporan sebelum mengirim ringkasan peserta yang memenuhi syarat ke Foonte. Hasil pengiriman grup dicatat di `reminder_logs`, sedangkan kuota WhatsApp dicatat di `notification_logs` dengan kanal `whatsapp`. Karena cron-job.org berjalan per menit, interval 15 detik tidak dapat dijamin oleh jalur ini.
+Respons berisi `jobId` untuk pengiriman reminder dan `attendanceJob.jobId` untuk pemeriksaan status. Simpan masing-masing sebagai `CRON_JOB_ORG_JOB_ID` dan `CRON_JOB_ORG_ATTENDANCE_JOB_ID` di environment Vercel, lalu jalankan konfigurasi kembali. Job pemeriksaan status memanggil `/api/cron/attendance` setiap 15 menit; job reminder memanggil `/api/cron/reminder` setiap menit. Keduanya memakai header `X-Cron-Secret`. Endpoint reminder memeriksa waktu reminder, interval, kuota harian, snooze, dan cache status laporan sebelum mengirim ringkasan peserta yang memenuhi syarat ke Foonte. Waktu reminder menggunakan presisi menit (HH:MM), mengikuti cron per menit. Pilihan interval: 15/30 menit, 1/1,5/2/3/4 jam.
