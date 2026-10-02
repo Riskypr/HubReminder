@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Diagnostik Checker Attendance
+- **Added**: Respons endpoint checker membedakan Edge Function yang belum ditemukan (HTTP 404) dari kegagalan pemeriksaan lain.
+- **Changed**: Kegagalan upstream kini mengembalikan kode HTTP checker agar riwayat cron lebih mudah didiagnosis.
+- **Deprecated/Removed**: Tidak ada.
+- **Notes for Next Agent**: Live check menemukan `/functions/v1/check-attendance` membalas 404; deploy Edge Function ke proyek Supabase yang sama dengan Vercel sebelum mengaktifkan job checker.
+
 ## [2026-10-02] - Jadwalkan Checker Status melalui cron-job.org
 - **Added**: Endpoint `/api/cron/attendance` untuk memanggil Edge Function `check-attendance` dan job cron-job.org kedua dengan jadwal setiap 15 menit.
 - **Changed**: `/api/cron/reminder/configure` kini menyinkronkan job pemeriksaan status dan job pengiriman WA; respons checker diringkas agar data peserta tidak terekspos di riwayat cron-job.org.

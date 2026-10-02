@@ -43,7 +43,14 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok || failed > 0) {
       console.error('[cron/attendance] checker gagal:', { status: response.status, failed });
-      return NextResponse.json({ error: 'Pengecekan status laporan gagal', processed: result.processed ?? 0, failed }, { status: 502 });
+      return NextResponse.json({
+        error: response.status === 404
+          ? 'Edge Function check-attendance belum dideploy pada proyek Supabase ini'
+          : 'Pengecekan status laporan gagal',
+        checkerStatus: response.status,
+        processed: result.processed ?? 0,
+        failed,
+      }, { status: 502 });
     }
 
     return NextResponse.json({ success: true, processed: result.processed ?? result.results?.length ?? 0, failed: 0 });

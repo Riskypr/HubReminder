@@ -3,6 +3,7 @@
 // PENTING: Kredensial & cookie sesi hanya diproses di server, tidak pernah diteruskan ke client.
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { parseApiResponse, parseStatus, type MagangHubHomeApiData } from '@/lib/attendance/parser';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 import type { Profile } from '@/lib/types/session';
@@ -358,13 +359,20 @@ export async function checkAndUpdateAttendance(
     }
   }
 
-  // 1. Simpan hasil pengecekan ke attendance_checks
-  await supabase.from('attendance_checks').insert({
-    user_id: userId,
-    status: finalStatus,
-    detected_via: finalVia,
-    checked_at: nowIso,
-  });
+  // RLS hanya mengizinkan service_role menulis ke attendance_checks.
+  // Gunakan admin client khusus untuk insert ini; client sesi user akan ditolak.
+  const { error: attendanceCheckError } = await createAdminClient()
+    .from('attendance_checks')
+    .insert({
+      user_id: userId,
+      status: finalStatus,
+      detected_via: finalVia,
+      checked_at: nowIso,
+    });
+  if (attendanceCheckError) {
+    console.error('[maganghub] Gagal menyimpan attendance check:', attendanceCheckError.message);
+    throw new Error('Gagal menyimpan hasil pengecekan absensi');
+  }
 
   // 2. Perbarui status sesi di maganghub_sessions
   if (finalStatus === 'session_expired') {
