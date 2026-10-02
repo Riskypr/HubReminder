@@ -76,4 +76,11 @@ npm test
 ```
 
 ### 6. Menjadwalkan Reminder Grup WhatsApp
-Pada cron-job.org, buat job `POST` ke `https://<domain>/api/cron/reminder` dan tambahkan header `X-Cron-Secret` dengan nilai yang sama seperti `CRON_SECRET_KEY`. Endpoint membaca status terakhir yang tersimpan di Supabase, mengirim ringkasan ke Foonte, lalu mencatat hasilnya ke `reminder_logs`. Jadwalkan misalnya pukul 07:00 WIB.
+Isi `APP_URL`, `CRON_SECRET_KEY`, dan `CRON_JOB_ORG_API_KEY` pada `.env.local`/platform deployment. API key hanya dipakai di server untuk membuat atau memperbarui job. Setelah deploy, sinkronkan job sekali dengan:
+
+```bash
+curl -X POST https://<domain>/api/cron/reminder/configure \
+  -H "X-Cron-Secret: <nilai-CRON_SECRET_KEY>"
+```
+
+Respons pertama berisi `jobId`; simpan sebagai `CRON_JOB_ORG_JOB_ID` di environment lalu deploy ulang. Pemanggilan sinkronisasi berikutnya akan memperbarui job yang sama, bukan membuat duplikat. Job dijalankan setiap menit (zona waktu `CRON_REMINDER_TIMEZONE`, default `Asia/Jakarta`) dan mengirim `POST` dengan header `X-Cron-Secret` ke `/api/cron/reminder`. Endpoint memeriksa waktu reminder, interval, kuota harian, snooze, dan status laporan setiap peserta sebelum mengirim ringkasan peserta yang memenuhi syarat ke Foonte. Hasil pengiriman grup dicatat di `reminder_logs`, sedangkan kuota peserta dicatat di `notification_logs`. Cron-job.org berjalan per menit, sehingga pilihan interval 15 detik tidak dapat dijamin oleh jalur ini.

@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Polling Reminder melalui cron-job.org
+- **Added**: Pemeriksaan kelayakan reminder WhatsApp per peserta pada setiap pemanggilan cron.
+- **Changed**: Job cron-job.org berjalan setiap menit; endpoint hanya menyertakan peserta dengan status `belum_lapor` yang memenuhi jadwal, interval, kuota harian, dan aturan snooze. Pengiriman yang berhasil juga masuk ke `notification_logs` agar kuota dan interval dipakai bersama jalur reminder lainnya. Dokumentasi setup diperbarui.
+- **Deprecated/Removed**: Pengaturan jadwal statis `CRON_REMINDER_HOUR` dan `CRON_REMINDER_MINUTE` tidak lagi digunakan.
+- **Notes for Next Agent**: cron-job.org memiliki resolusi satu menit, sehingga interval uji coba 15 detik tidak terjamin. Terapkan migration `20261001000003` dan `20261001000004`; job wajib disinkronkan ulang melalui `/api/cron/reminder/configure` setelah deploy.
+
 ## [2026-10-01] - Jadwal Reminder Multi-Waktu
 - **Added**: Kolom `interval_seconds` dan `reminder_times` melalui migration `20261001000004`, serta pilihan interval 15 detik untuk uji coba.
 - **Changed**: Form tidak lagi memakai rentang mulai–selesai; pengguna dapat menambah, melihat, dan menghapus beberapa waktu reminder hingga presisi detik.
