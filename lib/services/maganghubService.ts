@@ -88,7 +88,9 @@ export function splitSetCookieHeader(header: string): string[] {
 }
 
 function getSetCookies(response: Response): string[] {
-  if (typeof response.headers.getSetCookie === 'function') return response.headers.getSetCookie();
+  if (typeof response.headers.getSetCookie === 'function') {
+    return response.headers.getSetCookie().flatMap(splitSetCookieHeader);
+  }
   const setCookie = response.headers.get('set-cookie');
   // `Headers.get()` pada beberapa runtime Node menggabungkan banyak Set-Cookie
   // menjadi satu string. Pecah hanya pada awal cookie baru; tanggal `Expires`
@@ -136,6 +138,113 @@ function tokenFromCookies(cookies: SessionCookie[]): MagangHubAuthTokens | null 
   const accessToken = cookies.find((cookie) => /^(?:monev[-_]access[-_]token|access_token)$/i.test(cookie.name))?.value;
   const refreshToken = cookies.find((cookie) => /^(?:monev[-_]refresh[-_]token|refresh_token)$/i.test(cookie.name))?.value ?? null;
   return accessToken ? { accessToken, refreshToken } : null;
+}
+
+function tokensFromUrl(url: URL): MagangHubAuthTokens | null {
+  const hashParams = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash);
+  const accessToken = url.searchParams.get('access_token') ?? url.searchParams.get('token') ??
+    hashParams.get('access_token') ?? hashParams.get('token');
+  if (!accessToken) return null;
+  return {
+    accessToken,
+    refreshToken: url.searchParams.get('refresh_token') ?? hashParams.get('refresh_token'),
+  };
+}
+
+function ssoCodeFromUrl(url: URL): { code: string; state: string } | null {
+  const code = url.searchParams.get('code');
+  const state = url.searchParams.get('state');
+  return code && state ? { code, state } : null;
+}
+
+function parseMonevTokens(payload: any): MagangHubAuthTokens | null {
+  const auth = payload?.data?.tokens ?? payload?.data ?? payload?.tokens ?? payload;
+  const nestedToken = typeof auth?.token === 'object' && auth.token !== null ? auth.token : null;
+  const accessToken = auth?.access_token ?? auth?.accessToken ?? nestedToken?.access_token ?? nestedToken?.accessToken ?? auth?.token;
+  if (typeof accessToken !== 'string' || !accessToken) return null;
+  const refreshToken = auth?.refresh_token ?? auth?.refreshToken ?? nestedToken?.refresh_token ?? nestedToken?.refreshToken;
+  return { accessToken, refreshToken: typeof refreshToken === 'string' ? refreshToken : null };
+}
+
+async function exchangeSsoCode(
+  code: string,
+  state: string,
+  cookieJar: SessionCookie[],
+  signal: AbortSignal
+): Promise<MagangHubAuthTokens | null> {
+  const callbackUrl = new URL(`${MAGANGHUB_API_BASE}/auth/login/callback`);
+  callbackUrl.searchParams.set('code', code);
+  callbackUrl.searchParams.set('state', state);
+  const response = await fetch(callbackUrl, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Origin: 'https://monev.maganghub.kemnaker.go.id',
+      Referer: 'https://monev.maganghub.kemnaker.go.id/',
+      'X-Frontend-Build-ID': MAGANGHUB_FRONTEND_BUILD_ID,
+      ...(cookieHeaderForUrl(cookieJar, callbackUrl) ? { Cookie: cookieHeaderForUrl(cookieJar, callbackUrl) } : {}),
+    },
+    redirect: 'manual',
+    signal,
+  });
+  const payload = await response.clone().json().catch(() => null);
+  if (!response.ok) {
+    const responseKeys = payload && typeof payload === 'object' ? Object.keys(payload) : [];
+    const dataKeys = payload?.data && typeof payload.data === 'object' ? Object.keys(payload.data) : [];
+    console.warn('[maganghub/login] SSO code exchange rejected:', {
+      host: callbackUrl.hostname,
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      cookieNames: [...new Set(cookieJar.map((cookie) => cookie.name))],
+      responseKeys,
+      dataKeys,
+    });
+    return null;
+  }
+  return parseMonevTokens(payload);
+}
+
+async function getSsoAuthorizationUrl(
+  startUrl: URL,
+  cookieJar: SessionCookie[],
+  signal: AbortSignal
+): Promise<URL | null> {
+  const response = await fetch(startUrl, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      Origin: 'https://monev.maganghub.kemnaker.go.id',
+      Referer: 'https://monev.maganghub.kemnaker.go.id/',
+      'X-Frontend-Build-ID': MAGANGHUB_FRONTEND_BUILD_ID,
+    },
+    redirect: 'manual',
+    signal,
+  });
+  if (!response.ok) {
+    console.warn('[maganghub/login] Failed to initialize Monev SSO:', {
+      host: startUrl.hostname,
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+    });
+    return null;
+  }
+  addResponseCookies(cookieJar, response, startUrl);
+  const body = await response.text();
+  let candidate: unknown = body.trim();
+  try {
+    const payload = JSON.parse(body);
+    candidate = payload?.data?.redirectUrl ?? payload?.data?.redirect_uri ?? payload?.data?.url ??
+      payload?.redirectUrl ?? payload?.redirect_uri ?? payload?.url ?? payload;
+  } catch {
+    // The Monev API currently returns the SSO URL as plain text.
+  }
+  if (typeof candidate !== 'string' || !candidate) return null;
+  try {
+    const authorizationUrl = secureOfficialKemnakerUrl(new URL(candidate, startUrl));
+    return authorizationUrl.hostname === 'account.kemnaker.go.id' ? authorizationUrl : null;
+  } catch {
+    return null;
+  }
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -198,7 +307,7 @@ function describeLoginConnectionError(error: unknown): string {
 function resolveMagangHubLoginUrl(configuredPath: string): URL {
   const target = /^https?:\/\//i.test(configuredPath)
     ? new URL(configuredPath)
-    : new URL(configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`, MAGANGHUB_API_BASE);
+    : new URL(configuredPath.replace(/^\/+/, ''), `${MAGANGHUB_API_BASE}/`);
 
   if (target.protocol !== 'https:' ||
     !(target.hostname === 'kemnaker.go.id' || target.hostname.endsWith('.kemnaker.go.id'))) {
@@ -216,6 +325,10 @@ async function followSsoRedirect(
 
   for (let redirectCount = 0; redirectCount < 6; redirectCount += 1) {
     currentUrl = secureOfficialKemnakerUrl(currentUrl);
+    const fromUrl = tokensFromUrl(currentUrl);
+    if (fromUrl) return fromUrl;
+    const ssoCode = ssoCodeFromUrl(currentUrl);
+    if (ssoCode) return exchangeSsoCode(ssoCode.code, ssoCode.state, cookieJar, signal);
     const response = await fetch(currentUrl, {
       method: 'GET',
       headers: {
@@ -238,21 +351,27 @@ async function followSsoRedirect(
     }
 
     const payload = await response.clone().json().catch(() => null);
-    const auth = payload?.data?.tokens ?? payload?.data ?? payload?.tokens ?? payload;
-    const nestedToken = typeof auth?.token === 'object' && auth.token !== null ? auth.token : null;
-    const accessToken = auth?.access_token ?? auth?.accessToken ?? nestedToken?.access_token ?? nestedToken?.accessToken ?? auth?.token;
-    if (typeof accessToken === 'string' && accessToken) {
-      const refreshToken = auth?.refresh_token ?? auth?.refreshToken ?? nestedToken?.refresh_token ?? nestedToken?.refreshToken;
-      return { accessToken, refreshToken: typeof refreshToken === 'string' ? refreshToken : null };
+    const responseTokens = parseMonevTokens(payload);
+    if (responseTokens) return responseTokens;
+    const redirectUri = payload?.data?.redirect_uri ?? payload?.redirect_uri;
+    if (typeof redirectUri === 'string' && redirectUri) {
+      currentUrl = new URL(redirectUri, currentUrl);
+      continue;
     }
 
-    const finalUrlToken = currentUrl.searchParams.get('access_token') ?? currentUrl.searchParams.get('token');
-    if (finalUrlToken) {
-      return {
-        accessToken: finalUrlToken,
-        refreshToken: currentUrl.searchParams.get('refresh_token'),
-      };
-    }
+    const finalUrlTokens = tokensFromUrl(currentUrl);
+    if (finalUrlTokens) return finalUrlTokens;
+
+    const responseKeys = payload && typeof payload === 'object' ? Object.keys(payload) : [];
+    const dataKeys = payload?.data && typeof payload.data === 'object' ? Object.keys(payload.data) : [];
+    console.warn('[maganghub/login] SSO redirect completed without Monev access token:', {
+      host: currentUrl.hostname,
+      status: response.status,
+      contentType: response.headers.get('content-type'),
+      cookieNames: [...new Set(cookieJar.map((cookie) => cookie.name))],
+      responseKeys,
+      dataKeys,
+    });
     return null;
   }
 
@@ -300,7 +419,15 @@ async function loginThroughKemnakerSso(
   signal: AbortSignal
 ): Promise<{ tokens?: MagangHubAuthTokens; error?: string }> {
   const cookieJar: SessionCookie[] = [];
-  const { response: loginPage, url: formUrl } = await fetchSsoLoginPage(loginUrl, cookieJar, signal);
+  const startUrl = loginUrl.hostname === 'monev-api.maganghub.kemnaker.go.id' &&
+    loginUrl.pathname === '/api/v1/auth/login'
+    ? loginUrl
+    : new URL(`${MAGANGHUB_API_BASE}/auth/login`);
+  const authorizationUrl = await getSsoAuthorizationUrl(startUrl, cookieJar, signal);
+  if (!authorizationUrl) {
+    return { error: 'Monev tidak memberikan URL SSO SIAPKerja. Periksa koneksi API MagangHub dan coba lagi.' };
+  }
+  const { response: loginPage, url: formUrl } = await fetchSsoLoginPage(authorizationUrl, cookieJar, signal);
   if (!loginPage.ok) {
     if (loginPage.status === 403) {
       return { error: 'Halaman login SIAPKerja ditolak oleh proteksi server (HTTP 403). Coba lagi beberapa saat; jika berulang, autentikasi otomatis sedang diblokir oleh SIAPKerja.' };
@@ -312,27 +439,28 @@ async function loginThroughKemnakerSso(
     return { error: 'Halaman login SIAPKerja tidak memberikan token keamanan CSRF.' };
   }
 
-  const response = await fetch(formUrl, {
+  const credentialUrl = new URL('/auth/login', formUrl.origin);
+  const response = await fetch(credentialUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/plain, */*',
       'X-Requested-With': 'XMLHttpRequest',
       'X-CSRF-TOKEN': csrfToken,
-      Origin: formUrl.origin,
+      Origin: credentialUrl.origin,
       Referer: formUrl.toString(),
       'Accept-Language': SIAPKERJA_ACCEPT_LANGUAGE,
       'User-Agent': SIAPKERJA_USER_AGENT,
-      Cookie: cookieHeaderForUrl(cookieJar, formUrl),
+      Cookie: cookieHeaderForUrl(cookieJar, credentialUrl),
     },
     body: JSON.stringify({ username: email, password }),
     redirect: 'manual',
     signal,
   });
-  addResponseCookies(cookieJar, response, formUrl);
-  const payload = await response.json().catch(() => null);
-  const redirectUri = payload?.data?.redirect_uri;
-  if (!response.ok) {
+  addResponseCookies(cookieJar, response, credentialUrl);
+  const payload = await response.clone().json().catch(() => null);
+  const redirectUri = payload?.data?.redirect_uri ?? payload?.redirect_uri ?? response.headers.get('location');
+  if (!response.ok && !(response.status >= 300 && response.status < 400 && redirectUri)) {
     const message = payload?.errors?.username?.[0] ?? payload?.message;
     if (response.status === 403) {
       return { error: 'Login SIAPKerja ditolak oleh proteksi server (HTTP 403), bukan otomatis berarti akun atau kata sandi salah. Coba lagi beberapa saat.' };
@@ -346,7 +474,7 @@ async function loginThroughKemnakerSso(
     return { error: 'Login SIAPKerja berhasil, tetapi tidak memberikan redirect ke sesi MagangHub.' };
   }
 
-  const tokens = await followSsoRedirect(new URL(redirectUri), cookieJar, signal);
+  const tokens = await followSsoRedirect(new URL(redirectUri, credentialUrl), cookieJar, signal);
   return tokens
     ? { tokens }
     : { error: 'Login SIAPKerja berhasil, tetapi sesi Monev MagangHub belum menghasilkan access token.' };
@@ -357,76 +485,21 @@ export async function loginToMagangHub(email: string, password: string): Promise
   tokens?: MagangHubAuthTokens;
   error?: string;
 }> {
-  const configuredPath = process.env.MAGANGHUB_LOGIN_PATH || '/auth/login';
-  let loginUrl: URL;
-  try {
-    loginUrl = resolveMagangHubLoginUrl(configuredPath);
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Konfigurasi endpoint login MagangHub tidak valid.' };
-  }
-  const loginPath = loginUrl.pathname;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LOGIN_TIMEOUT_MS);
   try {
-    if (loginUrl.hostname === 'account.kemnaker.go.id') {
-      return await loginThroughKemnakerSso(loginUrl, email, password, controller.signal);
-    }
-
-    const response = await fetch(loginUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Origin: 'https://monev.maganghub.kemnaker.go.id',
-        Referer: 'https://monev.maganghub.kemnaker.go.id/',
-        'X-Frontend-Build-ID': MAGANGHUB_FRONTEND_BUILD_ID,
-      },
-      body: JSON.stringify({ email, password }),
-      redirect: 'manual',
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    const auth = payload?.data?.tokens ?? payload?.data ?? payload?.tokens ?? payload;
-    const cookies = typeof response.headers.getSetCookie === 'function'
-      ? response.headers.getSetCookie().join('; ')
-      : response.headers.get('set-cookie') || '';
-    const accessCookie = cookies.match(/(?:monev[-_]access[-_]token|access_token)=([^;]+)/i)?.[1];
-    const refreshCookie = cookies.match(/(?:monev[-_]refresh[-_]token|refresh_token)=([^;]+)/i)?.[1];
-    const nestedToken = typeof auth?.token === 'object' && auth.token !== null ? auth.token : null;
-    const accessToken = auth?.access_token ?? auth?.accessToken ?? nestedToken?.access_token ?? nestedToken?.accessToken ?? auth?.token ?? accessCookie;
-    const refreshToken = auth?.refresh_token ?? auth?.refreshToken ?? nestedToken?.refresh_token ?? nestedToken?.refreshToken ?? refreshCookie ?? null;
-    if (!response.ok) {
-      console.warn('[maganghub/login] Upstream login rejected request:', {
-        host: loginUrl.hostname,
-        path: loginPath,
-        status: response.status,
+    const configuredPath = process.env.MAGANGHUB_LOGIN_PATH || '/auth/login';
+    const configuredUrl = resolveMagangHubLoginUrl(configuredPath);
+    if (configuredUrl.hostname !== 'monev-api.maganghub.kemnaker.go.id' || configuredUrl.pathname !== '/api/v1/auth/login') {
+      console.warn('[maganghub/login] Ignoring obsolete login endpoint configuration:', {
+        host: configuredUrl.hostname,
+        path: configuredUrl.pathname,
       });
-      if (response.status === 401 || response.status === 403) {
-        return { error: `Server login MagangHub membalas HTTP ${response.status}. Ini belum memastikan email/kata sandi salah; periksa path dan format autentikasi (${loginPath}).` };
-      }
-      if (response.status === 404) {
-        return { error: `Endpoint login MagangHub tidak ditemukan (HTTP 404): ${loginPath}. Periksa MAGANGHUB_LOGIN_PATH.` };
-      }
-      if (response.status === 400 || response.status === 422) {
-        return { error: `Format request login ditolak MagangHub (HTTP ${response.status}). Path atau field kredensial mungkin berbeda.` };
-      }
-      if (response.status >= 300 && response.status < 400) {
-        return { error: `Endpoint login mengalihkan request (HTTP ${response.status}). Gunakan endpoint API autentikasi langsung, bukan halaman redirect/SSO.` };
-      }
-      return { error: `Server login MagangHub merespons HTTP ${response.status}. Coba lagi nanti atau periksa endpoint autentikasi.` };
     }
-    if (typeof accessToken !== 'string' || !accessToken) {
-      console.warn('[maganghub/login] Successful response did not include a recognized access token:', {
-        path: loginPath,
-        status: response.status,
-        contentType: response.headers.get('content-type'),
-      });
-      return { error: `Login endpoint membalas HTTP ${response.status}, tetapi access token tidak ditemukan pada body/header. Format respons autentikasi perlu disesuaikan.` };
-    }
-    return { tokens: { accessToken, refreshToken: typeof refreshToken === 'string' ? refreshToken : null } };
+    return await loginThroughKemnakerSso(configuredUrl, email, password, controller.signal);
   } catch (error) {
     console.warn('[maganghub/login] SSO connection failed:', {
-      host: loginUrl.hostname,
+      host: 'monev-api.maganghub.kemnaker.go.id',
       reason: error instanceof Error ? error.name : 'unknown',
       code: getErrorCode(error),
       redirectHost: getUntrustedRedirectHost(error),
