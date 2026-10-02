@@ -57,7 +57,7 @@
 |---|---|---|
 | `StatusCard` | Card besar di top dashboard, badge warna sesuai status + label teks ("Belum Lapor" / "Sudah Lapor" / "Tidak Diketahui") | pending / done / unknown |
 | `LastCheckedInfo` | Teks kecil "Terakhir dicek 5 menit lalu" | — |
-| `ConnectAccountForm` | Form input cookie sesi + instruksi cara mengambilnya, indikator status koneksi | connected / disconnected / expired |
+| `ConnectAccountForm` | Form login kredensial MagangHub, indikator sesi, dan aksi putus koneksi | connected / disconnected / expired |
 | `ReminderSettingsForm` | Slider/stepper jumlah maksimum reminder, dropdown interval, daftar waktu yang dapat ditambah/hapus, toggle aktif/nonaktif | — |
 | `HistoryTimeline` | List riwayat status per hari (tanggal, badge status, jumlah reminder terkirim) | — |
 | `NotificationLogItem` | Baris log notifikasi: waktu kirim, status saat dikirim | — |
@@ -77,9 +77,9 @@
 
 ### 5.1 Flow: Onboarding & Hubungkan Akun
 ```
-Buka app pertama kali → Login (Supabase Auth: email/Google)
-  → Layar "Hubungkan Akun MagangHub" + panduan cara ambil cookie sesi (step-by-step dengan screenshot)
-    → Paste cookie → Simpan → Sistem verifikasi (fetch test)
+Buka app pertama kali → Login (Supabase Auth)
+  → Layar "Hubungkan Akun MagangHub" → Masukkan email dan kata sandi MagangHub
+    → API proxy mendapatkan token, mengenkripsi dan menyimpannya → Sistem verifikasi profil
       → Sukses: tampil StatusCard sesuai status asli
       → Gagal: tampil pesan error + link bantuan ulangi
   → Prompt izinkan notifikasi push
@@ -106,7 +106,7 @@ Setting → Reminder
 Edge Function deteksi sesi expired
   → Push notification: "Sesi MagangHub kamu perlu dihubungkan ulang"
   → Buka app → SessionExpiredBanner tampil di atas Dashboard
-    → Tap banner → ke halaman ConnectAccountForm untuk update cookie baru
+    → Tap banner → ke halaman ConnectAccountForm untuk login ulang ke MagangHub
 ```
 
 ## 6. Layout Dashboard (Wireframe Deskriptif — Mobile)

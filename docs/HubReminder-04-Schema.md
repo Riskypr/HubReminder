@@ -22,13 +22,14 @@ Menyimpan sesi login MagangHub milik user (terenkripsi).
 |---|---|---|
 | id | uuid | PK |
 | user_id | uuid | FK → `profiles.id`, unique (1 user = 1 sesi aktif) |
-| encrypted_cookie | text | Nilai cookie sesi, dienkripsi (AES) sebelum disimpan |
+| encrypted_session | text | Access token/sesi MagangHub terenkripsi (AES-GCM) |
+| encrypted_refresh_token | text nullable | Refresh token MagangHub terenkripsi (AES-GCM) |
 | status | text | `'valid'` \| `'expired'` \| `'unverified'` |
 | last_verified_at | timestamptz | Kapan terakhir kali sukses fetch dashboard |
 | created_at | timestamptz | — |
 | updated_at | timestamptz | — |
 
-> **Catatan keamanan:** kolom `encrypted_cookie` **tidak pernah** diakses langsung dari client — hanya diproses lewat Edge Function (`service_role`), dan didekripsi hanya di memori saat proses fetch berjalan.
+> **Catatan keamanan:** material sesi dan refresh token tidak pernah dikembalikan ke client. Backend dan Edge Function mendekripsinya hanya di memori saat proses fetch berjalan. Migration `20261002000008_maganghub_credential_sessions.sql` mengganti kolom cookie lama; sesi lama tetap dapat dibaca sampai peserta login kembali.
 
 ### 2.3 `attendance_checks`
 Log hasil setiap kali sistem mengecek status laporan.

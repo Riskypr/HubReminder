@@ -31,9 +31,11 @@ export interface FetchDashboardResult {
   };
   isLoginRedirect?: boolean;
   error?: string;
+  refreshedAccessToken?: string;
+  refreshedRefreshToken?: string | null;
 }
 
-export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDashboardResult> {
+export async function fetchDashboard(cookiePlaintext: string, refreshToken: string | null = null): Promise<FetchDashboardResult> {
   const cleanStr = cookiePlaintext.trim();
   let bearerToken: string | null = null;
 
@@ -65,6 +67,8 @@ export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDash
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let refreshedAccessToken: string | undefined;
+  let refreshedRefreshToken: string | null | undefined;
 
   try {
     const headers: Record<string, string> = {
@@ -95,7 +99,7 @@ export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDash
           headers: {
             'User-Agent': headers['User-Agent'],
             'Accept': 'application/json, text/plain, */*',
-            'Cookie': cookieHeader,
+            'Cookie': refreshToken ? `${cookieHeader}; refresh_token=${refreshToken}` : cookieHeader,
             'X-Frontend-Build-ID': MAGANGHUB_BUILD_ID,
           },
           signal: controller.signal,
@@ -104,6 +108,8 @@ export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDash
         if (refreshRes.ok) {
           const refreshJson = await refreshRes.json().catch(() => null);
           if (refreshJson?.access_token) {
+            refreshedAccessToken = refreshJson.access_token;
+            if ('refresh_token' in refreshJson) refreshedRefreshToken = refreshJson.refresh_token ?? null;
             headers['Authorization'] = `Bearer ${refreshJson.access_token}`;
             homeRes = await fetch(`${MAGANGHUB_API_BASE}/users/me/home`, {
               method: 'GET',
@@ -149,6 +155,8 @@ export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDash
           home: homeData,
           user: userData,
         },
+        refreshedAccessToken,
+        refreshedRefreshToken,
       };
     }
 
@@ -176,7 +184,7 @@ export async function fetchDashboard(cookiePlaintext: string): Promise<FetchDash
     }
 
     const html = await htmlResponse.text();
-    return { ok: true, html };
+    return { ok: true, html, refreshedAccessToken, refreshedRefreshToken };
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     const error = err as Error;

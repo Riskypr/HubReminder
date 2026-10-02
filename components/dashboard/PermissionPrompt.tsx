@@ -3,6 +3,8 @@
 'use client';
 
 import { useState } from 'react';
+import { BellRing } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface PermissionPromptProps {
   vapidPublicKey: string;
@@ -72,8 +74,11 @@ export default function PermissionPrompt({
       }
 
       onSubscribed?.();
+      toast.success('Notifikasi push berhasil diaktifkan.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan saat mengaktifkan notifikasi');
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengaktifkan notifikasi';
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -81,7 +86,7 @@ export default function PermissionPrompt({
 
   return (
     <div className="card space-y-3 text-center">
-      <div className="text-3xl" aria-hidden="true">🔔</div>
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true"><BellRing size={24} /></div>
       <h2 className="text-base font-semibold text-text-primary">
         Aktifkan Notifikasi Push
       </h2>

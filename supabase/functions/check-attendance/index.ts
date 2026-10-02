@@ -9,7 +9,7 @@ import { sendWebPushNotification } from './notifier.ts';
 import { isReminderTimeDue } from './reminder.ts';
 
 // AES-GCM decryption helper untuk Deno runtime
-async function decryptCookie(encrypted: string, rawKey: string): Promise<string> {
+async function decryptSessionSecret(encrypted: string, rawKey: string): Promise<string> {
   const [ivHex, ciphertextB64] = encrypted.split('.');
   if (!ivHex || !ciphertextB64) throw new Error('Format cookie terenkripsi tidak valid');
 
@@ -36,6 +36,18 @@ async function decryptCookie(encrypted: string, rawKey: string): Promise<string>
   return new TextDecoder().decode(decrypted);
 }
 
+async function encryptSession(value: string, rawKey: string): Promise<string> {
+  const keyBuffer = new TextEncoder().encode(rawKey.padEnd(32, '0').slice(0, 32));
+  const cryptoKey = await crypto.subtle.importKey('raw', keyBuffer, { name: 'AES-GCM' }, false, ['encrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(value));
+  const ivHex = [...iv].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  const bytes = new Uint8Array(ciphertext);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return `${ivHex}.${btoa(binary)}`;
+}
+
 Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -58,7 +70,7 @@ Deno.serve(async (req) => {
     // 1. Ambil seluruh session yang bukan 'expired'
     const { data: sessions, error: sessionErr } = await supabase
       .from('maganghub_sessions')
-      .select('id, user_id, encrypted_cookie, status, profiles(timezone)')
+      .select('id, user_id, encrypted_session, encrypted_refresh_token, status, profiles(timezone)')
       .neq('status', 'expired');
 
     if (sessionErr) {
@@ -72,10 +84,25 @@ Deno.serve(async (req) => {
 
     for (const session of sessions || []) {
       try {
-        const cookiePlaintext = await decryptCookie(session.encrypted_cookie, encryptionKey);
+        const accessToken = await decryptSessionSecret(session.encrypted_session, encryptionKey);
+        const refreshToken = session.encrypted_refresh_token
+          ? await decryptSessionSecret(session.encrypted_refresh_token, encryptionKey)
+          : null;
 
         // a. Fetch data MagangHub API / dashboard
-        const fetchRes = await fetchDashboard(cookiePlaintext);
+        const fetchRes = await fetchDashboard(accessToken, refreshToken);
+
+        if (fetchRes.refreshedAccessToken) {
+          await supabase.from('maganghub_sessions').update({
+            encrypted_session: await encryptSession(fetchRes.refreshedAccessToken, encryptionKey),
+            ...(fetchRes.refreshedRefreshToken !== undefined
+              ? { encrypted_refresh_token: fetchRes.refreshedRefreshToken
+                  ? await encryptSession(fetchRes.refreshedRefreshToken, encryptionKey)
+                  : null }
+              : {}),
+            updated_at: new Date().toISOString(),
+          }).eq('id', session.id);
+        }
 
         let detectedStatus: 'belum_lapor' | 'selesai' | 'unknown' | 'session_expired' = 'unknown';
         let detectedVia = 'fetch_failure';

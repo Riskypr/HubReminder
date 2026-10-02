@@ -1,7 +1,7 @@
 // lib/utils/crypto.ts
-// Enkripsi/dekripsi cookie sesi MagangHub.
+// Enkripsi/dekripsi token sesi MagangHub.
 // PENTING: fungsi ini hanya boleh dipanggil dari server/Edge Function — tidak pernah dari client.
-// Dilarang log/print nilai plaintext cookie di sini.
+// Dilarang log/print nilai plaintext token di sini.
 
 const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
@@ -21,10 +21,10 @@ function getKeyMaterial(): Promise<CryptoKey> {
 }
 
 /**
- * Enkripsi nilai cookie sesi sebelum disimpan ke database.
+ * Enkripsi nilai token sebelum disimpan ke database.
  * @returns string base64 format: "<iv_hex>.<ciphertext_base64>"
  */
-export async function encryptCookie(plaintext: string): Promise<string> {
+export async function encryptSessionSecret(plaintext: string): Promise<string> {
   const key = await getKeyMaterial();
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const encoded = new TextEncoder().encode(plaintext);
@@ -41,10 +41,10 @@ export async function encryptCookie(plaintext: string): Promise<string> {
 }
 
 /**
- * Dekripsi cookie sesi untuk dipakai saat fetch ke MagangHub.
+ * Dekripsi token sesi untuk dipakai saat fetch ke MagangHub.
  * Panggil hanya di Edge Function / server — hasil TIDAK boleh dikirim ke client.
  */
-export async function decryptCookie(encrypted: string): Promise<string> {
+export async function decryptSessionSecret(encrypted: string): Promise<string> {
   const [ivHex, ciphertextB64] = encrypted.split('.');
   if (!ivHex || !ciphertextB64) throw new Error('Format enkripsi tidak valid');
 

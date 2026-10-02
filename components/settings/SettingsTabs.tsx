@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Bell, ShieldCheck } from 'lucide-react';
 
 export default function SettingsTabs() {
   const pathname = usePathname();
@@ -23,7 +24,7 @@ export default function SettingsTabs() {
             : 'border-transparent text-text-secondary hover:text-text-primary'
         }`}
       >
-        <span>⏰</span>
+        <Bell size={15} aria-hidden="true" />
         <span>Pengaturan Reminder</span>
       </Link>
       <Link
@@ -36,8 +37,8 @@ export default function SettingsTabs() {
             : 'border-transparent text-text-secondary hover:text-text-primary'
         }`}
       >
-        <span>🔑</span>
-        <span>Akun & Cookie MagangHub</span>
+        <ShieldCheck size={15} aria-hidden="true" />
+        <span>Akun MagangHub</span>
       </Link>
     </div>
   );

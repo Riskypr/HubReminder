@@ -6,6 +6,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-02] - Redesign UI dan Login Kredensial MagangHub
+- **Added**: Endpoint proxy `POST /api/maganghub/login`, penyimpanan access/refresh token terenkripsi, migration `20261002000008_maganghub_credential_sessions.sql`, `ToastProvider`, ikon Lucide, dan formatter periode magang Indonesia.
+- **Changed**: Form penghubung akun tidak lagi menerima cookie manual; checker Edge Function menggunakan dan memperbarui token hasil refresh. Tampilan login, dashboard, navigasi, riwayat, dan pengaturan memakai layout mobile-first dengan feedback Toastify. Untuk SIAPKerja, proxy kini mengambil CSRF dan cookie awal, mengirim `{ username, password }`, lalu mengikuti redirect SSO. Resolver login menerima URL penuh atau path; pesan HTTP membedakan endpoint/format yang salah dari kredensial yang ditolak.
+- **Deprecated/Removed**: Endpoint input cookie `/api/account/connect` dan pemeriksaan cookie `/api/account/check-cookie` dihapus.
+- **Notes for Next Agent**: Terapkan migration `20261002000008` sebelum deploy. `MAGANGHUB_LOGIN_PATH` menerima path relatif atau URL HTTPS pada domain Kemnaker; default `/auth/login` belum dapat dikonfirmasi dari sumber resmi saat implementasi. Sesi lama tetap terbaca karena migration hanya mengganti nama kolom, lalu pengguna dapat login kembali untuk menyimpan token/refresh token baru.
+
 ## [2026-10-02] - Selaraskan Pengaturan Reminder dengan Cron
 - **Changed**: Input waktu reminder memakai presisi menit (HH:MM) dan nilai lama dengan detik dinormalisasi saat ditampilkan/disimpan.
 - **Changed**: Interval 15 detik dihapus; pilihan baru mencakup 3 dan 4 jam, dengan validasi API dan constraint database yang sejalan.

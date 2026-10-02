@@ -1,6 +1,8 @@
 // components/dashboard/SessionExpiredBanner.tsx
 'use client';
 
+import { TriangleAlert } from 'lucide-react';
+
 import Link from 'next/link';
 
 export default function SessionExpiredBanner() {
@@ -9,7 +11,7 @@ export default function SessionExpiredBanner() {
       role="alert"
       className="flex items-start gap-3 rounded-xl border border-warning bg-warning-bg px-4 py-3 text-sm"
     >
-      <span aria-hidden="true" className="text-lg shrink-0">⚠️</span>
+      <TriangleAlert size={18} aria-hidden="true" className="shrink-0" />
       <div className="flex-1">
         <p className="font-semibold text-warning">Sesi MagangHub kedaluwarsa</p>
         <p className="text-text-secondary mt-0.5">

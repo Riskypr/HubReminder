@@ -29,7 +29,7 @@ export default async function AccountSettingsPage() {
   return (
     <div className="space-y-4">
       <SettingsTabs />
-      <h1 className="text-xl font-semibold text-text-primary">Akun & Cookie MagangHub</h1>
+      <h1 className="text-xl font-semibold text-text-primary">Akun MagangHub</h1>
       <ConnectAccountForm currentSession={sessionInfo} currentProfile={userProfile} />
     </div>
   );

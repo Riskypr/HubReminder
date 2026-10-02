@@ -1,14 +1,8 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/pwa/ServiceWorkerRegister';
-
-const inter = Inter({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-inter',
-});
+import ToastProvider from '@/components/providers/ToastProvider';
 
 export const metadata: Metadata = {
   title: 'HubReminder — Pengingat Laporan Harian MagangHub',
@@ -35,10 +29,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className={inter.variable}>
+    <html lang="id">
       <head />
-      <body className={inter.className}>
+      <body>
         <ServiceWorkerRegister />
+        <ToastProvider />
         {children}
       </body>
     </html>

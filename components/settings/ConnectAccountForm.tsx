@@ -1,383 +1,142 @@
-// components/settings/ConnectAccountForm.tsx
-// Manajemen Cookie MagangHub: Cek Validitas, Tambah / Perbarui Cookie Baru
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { toast } from 'react-toastify';
+import { LogIn, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
 import type { MagangHubSession, Profile, SessionStatus } from '@/lib/types/session';
-
-const schema = z.object({
-  cookie: z
-    .string()
-    .min(10, 'Cookie terlalu pendek — pastikan kamu menyalin keseluruhan nilai cookie sesi')
-    .max(5000, 'Cookie terlalu panjang'),
-});
-
-type FormValues = z.infer<typeof schema>;
+import { formatInternshipPeriod } from '@/lib/utils/time';
 
 interface Props {
   currentSession: Pick<MagangHubSession, 'status' | 'last_verified_at'> | null;
   currentProfile?: Profile | null;
 }
 
-const SESSION_STATUS_CONFIG: Record<
-  SessionStatus,
-  { label: string; badgeClass: string; icon: string; desc: string }
-> = {
-  valid: {
-    label: 'Aktif & Terhubung',
-    badgeClass: 'badge-done',
-    icon: '🟢',
-    desc: 'Cookie masih berlaku. Sistem dapat memantau status laporan kamu secara berkala.',
-  },
-  expired: {
-    label: 'Kedaluwarsa',
-    badgeClass: 'badge-unknown border-l-4 border-l-warning',
-    icon: '⚠️',
-    desc: 'Sesi login telah habis. Masukkan cookie baru di bawah agar reminder tetap aktif.',
-  },
-  unverified: {
-    label: 'Belum Diverifikasi',
-    badgeClass: 'badge-unknown',
-    icon: '⚪',
-    desc: 'Cookie belum diverifikasi ke server MagangHub.',
-  },
+const statusCopy: Record<SessionStatus, { label: string; detail: string }> = {
+  valid: { label: 'Akun terhubung', detail: 'Sesi aktif dan dapat digunakan untuk sinkronisasi otomatis.' },
+  expired: { label: 'Sesi perlu diperbarui', detail: 'Silakan login kembali untuk mengaktifkan sinkronisasi.' },
+  unverified: { label: 'Belum diverifikasi', detail: 'Login dengan akun MagangHub untuk mulai menggunakan reminder.' },
 };
 
 export default function ConnectAccountForm({ currentSession, currentProfile }: Props) {
-  const [submitResult, setSubmitResult] = useState<'success' | 'error' | null>(null);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [disconnecting, setDisconnecting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<SessionStatus>(currentSession?.status ?? 'unverified');
+  const [lastVerified, setLastVerified] = useState(currentSession?.last_verified_at ?? null);
+  const [profile, setProfile] = useState<Profile | null>(currentProfile ?? null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  // State untuk Cek Masa Berlaku Cookie
-  const [isCheckingCookie, setIsCheckingCookie] = useState(false);
-  const [checkResult, setCheckResult] = useState<{
-    isValid: boolean;
-    message: string;
-    checkedAt?: string;
-  } | null>(null);
-
-  const [activeSession, setActiveSession] = useState<Pick<MagangHubSession, 'status' | 'last_verified_at'> | null>(
-    currentSession
-  );
-  const [activeProfile, setActiveProfile] = useState<Profile | null>(currentProfile ?? null);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
-
-  const watchedCookie = watch('cookie');
-
-  // 1. Fungsi Cek Cookie Langsung ke Server MagangHub
-  async function handleCheckCookie() {
-    setIsCheckingCookie(true);
-    setCheckResult(null);
-
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setSuccess('');
     try {
-      const res = await fetch('/api/account/check-cookie', { method: 'POST' });
-      const data = await res.json().catch(() => null);
-
-      if (res.ok) {
-        setCheckResult({
-          isValid: data.isValid,
-          message: data.message || (data.isValid ? 'Cookie masih aktif!' : 'Cookie telah kedaluwarsa.'),
-          checkedAt: data.checkedAt,
-        });
-
-        if (data.status) {
-          setActiveSession((prev) => ({
-            status: data.status,
-            last_verified_at: data.checkedAt || prev?.last_verified_at || null,
-          }));
-        }
-
-        if (data.profile) {
-          setActiveProfile(data.profile);
-        }
-      } else {
-        setCheckResult({
-          isValid: false,
-          message: data?.error || 'Gagal memeriksa status cookie ke server MagangHub.',
-        });
-      }
-    } catch {
-      setCheckResult({
-        isValid: false,
-        message: 'Koneksi terputus saat memeriksa status cookie.',
-      });
-    } finally {
-      setIsCheckingCookie(false);
-    }
-  }
-
-  // 2. Fungsi Simpan & Verifikasi Cookie Baru
-  async function onSubmit(values: FormValues) {
-    setSubmitResult(null);
-    setErrorMsg('');
-    setCheckResult(null);
-
-    try {
-      const res = await fetch('/api/account/connect', {
+      const response = await fetch('/api/maganghub/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie: values.cookie }),
+        body: JSON.stringify({ email, password }),
       });
-      const body = await res.json().catch(() => ({}));
-
-      if (res.ok && body.success) {
-        setSubmitResult('success');
-        reset();
-        if (body.profile) {
-          setActiveProfile(body.profile);
-        }
-        setActiveSession({
-          status: 'valid',
-          last_verified_at: new Date().toISOString(),
-        });
-
-        setCheckResult({
-          isValid: true,
-          message: `✓ Cookie berhasil disimpan dan terverifikasi aktif!${body.userName ? ` Terhubung sebagai ${body.userName}.` : ''}`,
-          checkedAt: new Date().toISOString(),
-        });
-
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } else {
-        // Tangani error spesifik dari validasi server
-        const errMessage = body.error || 'Gagal menghubungkan akun';
-        setErrorMsg(errMessage);
-        setSubmitResult('error');
-
-        // Tampilkan hasil cek juga
-        if (body.status === 'session_expired') {
-          setCheckResult({
-            isValid: false,
-            message: '⚠️ Cookie yang dimasukkan sudah kedaluwarsa. Silakan login ulang di MagangHub dan salin cookie baru.',
-          });
-        } else if (body.status === 'invalid') {
-          setCheckResult({
-            isValid: false,
-            message: '❌ Cookie tidak valid atau tidak dapat diverifikasi ke server MagangHub.',
-          });
-        }
-      }
-    } catch {
-      setErrorMsg('Terjadi kesalahan jaringan saat menyimpan cookie');
-      setSubmitResult('error');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || 'Login MagangHub gagal.');
+      setStatus('valid');
+      setLastVerified(new Date().toISOString());
+      setProfile(data.profile ?? null);
+      setPassword('');
+      const message = `Akun MagangHub berhasil dihubungkan${data.userName ? ` sebagai ${data.userName}` : ''}.`;
+      setSuccess(message);
+      toast.success(message);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Terjadi kesalahan saat menghubungkan akun.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
   }
 
-  // 3. Putuskan Koneksi Akun
-  async function handleDisconnect() {
-    if (!confirm('Putuskan koneksi akun MagangHub? Sistem tidak akan lagi dapat memantau status laporan harian kamu.')) {
-      return;
+  async function checkSession() {
+    setBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      const response = await fetch('/api/account/check-session', { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Gagal memeriksa sesi.');
+      setStatus(data.status ?? (data.isValid ? 'valid' : 'expired'));
+      setLastVerified(data.checkedAt ?? null);
+      if (data.profile) setProfile(data.profile);
+      if (!data.isValid) throw new Error(data.message || 'Sesi MagangHub sudah berakhir. Login kembali.');
+      setSuccess(data.message || 'Sesi MagangHub masih aktif.');
+      toast.success(data.message || 'Sesi MagangHub masih aktif.');
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Koneksi bermasalah saat memeriksa sesi.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
-    setDisconnecting(true);
-    const res = await fetch('/api/account/disconnect', { method: 'POST' });
-    if (res.ok) {
+  }
+
+  async function disconnect() {
+    if (!window.confirm('Putuskan koneksi akun MagangHub?')) return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch('/api/account/disconnect', { method: 'POST' });
+      if (!response.ok) throw new Error('Gagal memutuskan koneksi.');
       window.location.reload();
-    } else {
-      setDisconnecting(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Gagal memutuskan koneksi.';
+      setError(message);
+      toast.error(message);
+      setBusy(false);
     }
   }
-
-  const sessionStatus = activeSession?.status || 'unverified';
-  const cfg = activeSession ? SESSION_STATUS_CONFIG[sessionStatus] : null;
 
   return (
     <div className="space-y-4">
-      {/* 1. KARTU STATUS COOKIE & AKUN SAAT INI */}
-      <div className="card space-y-3 border-l-4 border-l-primary">
-        <div className="flex items-center justify-between flex-wrap gap-2">
+      <section className="card account-status-card space-y-4" aria-live="polite">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-text-primary">Status Cookie & Sesi MagangHub</h2>
-            {activeSession?.last_verified_at && (
-              <p className="text-xs text-text-muted mt-0.5">
-                Terverifikasi:{' '}
-                {new Date(activeSession.last_verified_at).toLocaleString('id-ID', {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                })}
-              </p>
-            )}
+            <p className="eyebrow">Koneksi MagangHub</p>
+          <h2 className="mt-1 flex items-center gap-2 text-lg font-bold text-text-primary"><ShieldCheck size={19} className="text-primary" aria-hidden="true" />{statusCopy[status].label}</h2>
+            <p className="mt-1 text-sm text-text-secondary">{statusCopy[status].detail}</p>
           </div>
-
-          {cfg && (
-            <span className={`${cfg.badgeClass} flex items-center gap-1.5`} role="img" aria-label={cfg.label}>
-              <span aria-hidden="true">{cfg.icon}</span> {cfg.label}
-            </span>
-          )}
+          <span className={`session-pill ${status === 'valid' ? 'is-valid' : ''}`}>{status === 'valid' ? 'Aktif' : 'Perlu login'}</span>
         </div>
-
-        {cfg && <p className="text-xs text-text-secondary leading-relaxed">{cfg.desc}</p>}
-
-        {/* Info profil tersinkronisasi jika ada */}
-        {activeProfile?.company_name && (
-          <div className="pt-2 border-t border-border/70 text-xs text-text-secondary space-y-1 bg-surface-alt/40 p-2.5 rounded-lg">
-            <p className="flex justify-between">
-              <span className="text-text-muted">Nama Peserta:</span>
-              <span className="font-semibold text-text-primary">{activeProfile.full_name}</span>
-            </p>
-            <p className="flex justify-between">
-              <span className="text-text-muted">Instansi Magang:</span>
-              <span className="font-semibold text-text-primary">{activeProfile.company_name}</span>
-            </p>
-            {activeProfile.internship_period && (
-              <p className="flex justify-between">
-                <span className="text-text-muted">Periode:</span>
-                <span className="font-medium text-text-primary">{activeProfile.internship_period}</span>
-              </p>
-            )}
+        {lastVerified && <p className="text-xs text-text-muted">Diverifikasi {new Date(lastVerified).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</p>}
+        {profile?.full_name && (
+          <div className="profile-summary">
+            <p><span>Peserta</span><strong>{profile.full_name}</strong></p>
+            {profile.company_name && <p><span>Instansi</span><strong>{profile.company_name}</strong></p>}
+            {profile.internship_period && <p><span>Periode</span><strong>{formatInternshipPeriod(profile.internship_period)}</strong></p>}
           </div>
         )}
+        {currentSession && <button type="button" className="btn-outline inline-flex w-full items-center justify-center gap-2 sm:w-auto" onClick={checkSession} disabled={busy}><RefreshCw size={15} className={busy ? 'animate-spin' : ''} aria-hidden="true" />{busy ? 'Memeriksa sesi…' : 'Periksa sesi'}</button>}
+      </section>
 
-        {/* Tombol Cek Masa Berlaku Cookie */}
-        {activeSession && (
-          <div className="pt-2 border-t border-border flex items-center justify-between gap-2 flex-wrap">
-            <button
-              type="button"
-              id="btn-check-cookie-validity"
-              onClick={handleCheckCookie}
-              disabled={isCheckingCookie}
-              className="btn-outline text-xs py-2 px-3 flex items-center gap-1.5 font-medium hover:bg-primary/5 border-primary/30 text-primary w-full sm:w-auto justify-center"
-            >
-              <span className={`inline-block ${isCheckingCookie ? 'animate-spin' : ''}`}>🔍</span>
-              <span>{isCheckingCookie ? 'Sedang Memeriksa ke MagangHub...' : 'Cek Apakah Cookie Sudah Kedaluwarsa'}</span>
-            </button>
-
-            {checkResult && (
-              <span
-                role="status"
-                className={`text-xs font-medium ${
-                  checkResult.isValid ? 'text-status-done' : 'text-red-500'
-                }`}
-              >
-                {checkResult.message}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 2. PANDUAN MENGAMBIL COOKIE DARI BROWSER */}
-      <details className="card cursor-pointer" id="guide-cookie">
-        <summary className="text-sm font-semibold text-text-primary list-none flex justify-between items-center">
-          <span className="flex items-center gap-1.5">
-            <span>📖</span>
-            <span>Cara Mengambil Cookie Sesi Terbaru di Browser</span>
-          </span>
-          <span className="text-text-muted text-xs">Tap untuk buka</span>
-        </summary>
-        <ol className="mt-3 space-y-2 text-xs sm:text-sm text-text-secondary list-decimal list-inside leading-relaxed bg-surface-alt/30 p-3 rounded-lg border border-border/50">
-          <li>
-            Buka situs <strong>monev.maganghub.kemnaker.go.id/dashboard</strong> di browser kamu lalu login.
-          </li>
-          <li>
-            Tekan <kbd className="bg-app-bg border border-border rounded px-1.5 py-0.5 text-xs font-mono">F12</kbd> (atau klik kanan $\rightarrow$ pilih <em>Inspect</em>) untuk membuka DevTools.
-          </li>
-          <li>
-            Pilih tab <strong>Application</strong> (di samping Console/Network) $\rightarrow$ di panel kiri klik <strong>Cookies</strong> $\rightarrow$ pilih domain <code>maganghub.kemnaker.go.id</code> (atau <code>monev.maganghub.kemnaker.go.id</code>).
-          </li>
-          <li>
-            Cari cookie bernama <code className="bg-app-bg rounded px-1 text-xs font-mono font-bold">monev-access-token</code>, <code className="bg-app-bg rounded px-1 text-xs font-mono font-bold">access_token</code>, atau <code className="bg-app-bg rounded px-1 text-xs font-mono font-bold">session</code>. (Bisa juga menyalin nilai token <code>Bearer eyJ...</code> langsung dari tab Network).
-          </li>
-          <li>
-            Klik dua kali pada kolom <strong>Value</strong>, tekan <kbd className="bg-app-bg border border-border rounded px-1 py-0.5 text-xs font-mono">Ctrl+C</kbd> untuk menyalin seluruh nilainya.
-          </li>
-          <li>
-            Tempel (*paste*) pada formulir input di bawah ini, lalu klik <strong>Simpan & Verifikasi Cookie</strong>.
-          </li>
-        </ol>
-      </details>
-
-      {/* 3. FORMULIR INPUT / PEMBARUAN COOKIE BARU */}
-      <form
-        onSubmit={handleSubmit(onSubmit)}
-        className="card space-y-4"
-        aria-label="Form input dan perbarui cookie sesi MagangHub"
-      >
+      <form onSubmit={onSubmit} className="card account-login-card space-y-4" aria-label="Login akun MagangHub">
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label htmlFor="cookie-input" className="label mb-0 font-semibold">
-              {activeSession ? 'Masukkan Cookie Baru (Pembaruan)' : 'Input Cookie Sesi MagangHub'}
-            </label>
-            {watchedCookie && (
-              <span className="text-[11px] text-text-muted font-mono">
-                {watchedCookie.length} karakter
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-text-muted mb-2">
-            {activeSession
-              ? 'Jika cookie sebelumnya sudah kedaluwarsa atau kamu baru saja login ulang di MagangHub, masukkan nilai cookie yang baru di sini:'
-              : 'Tempelkan nilai cookie sesi agar HubReminder dapat memantau status absensi secara otomatis:'}
-          </p>
-          <textarea
-            id="cookie-input"
-            rows={4}
-            className="input resize-none font-mono text-xs"
-            placeholder="Paste nilai cookie sesi atau token di sini..."
-            {...register('cookie')}
-          />
-          {errors.cookie && (
-            <p className="text-xs text-red-600 mt-1">{errors.cookie.message}</p>
-          )}
+          <p className="eyebrow">Login aman</p>
+          <h2 className="mt-1 text-lg font-bold text-text-primary">Hubungkan akun MagangHub</h2>
+          <p className="mt-1 text-sm text-text-secondary">Kredensial dikirim ke server untuk mendapatkan sesi. Kata sandi tidak disimpan.</p>
         </div>
-
-        {submitResult === 'success' && (
-          <div role="status" className="p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-status-done font-medium space-y-0.5">
-            <p className="font-bold">✓ Berhasil Disimpan & Diverifikasi!</p>
-            <p>Cookie baru aktif dan data profil berhasil disinkronkan. Halaman akan menyegarkan data...</p>
-          </div>
-        )}
-
-        {submitResult === 'error' && (
-          <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 font-medium">
-            <p className="font-bold">✕ Gagal Menyimpan Cookie</p>
-            <p>{errorMsg}</p>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          id="btn-connect-submit"
-          disabled={isSubmitting}
-          className="btn-primary w-full flex items-center justify-center gap-2"
-        >
-          {isSubmitting ? (
-            <>
-              <span className="animate-spin inline-block">🔄</span>
-              <span>Menyimpan & Memverifikasi...</span>
-            </>
-          ) : activeSession ? (
-            'Simpan & Verifikasi Cookie Baru'
-          ) : (
-            'Hubungkan Akun'
-          )}
-        </button>
+        <div>
+          <label className="label" htmlFor="maganghub-email">Email MagangHub</label>
+          <input id="maganghub-email" className="input" type="email" autoComplete="username" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nama@email.com" />
+        </div>
+        <div>
+          <label className="label" htmlFor="maganghub-password">Kata sandi MagangHub</label>
+          <input id="maganghub-password" className="input" type="password" autoComplete="current-password" required maxLength={256} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Masukkan kata sandi" />
+        </div>
+        {error && <p className="feedback feedback-error" role="alert">{error}</p>}
+        {success && <p className="feedback feedback-success" role="status">{success}</p>}
+        <button type="submit" disabled={busy} className="btn-primary inline-flex w-full items-center justify-center gap-2 bg-gradient-to-r from-primary to-[#7157E8] shadow-md shadow-primary/15 hover:brightness-105"><LogIn size={16} aria-hidden="true" />{busy ? 'Menghubungkan…' : status === 'valid' ? 'Perbarui sesi MagangHub' : 'Hubungkan akun'}</button>
       </form>
 
-      {/* 4. TOMBOL PUTUSKAN KONEKSI (HAPUS SESI) */}
-      {activeSession && (
-        <div className="pt-2">
-          <button
-            id="btn-disconnect"
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="btn-outline w-full text-xs text-red-600 border-red-200 hover:bg-red-50 py-2.5 transition-colors"
-          >
-            {disconnecting ? 'Memutuskan...' : 'Putuskan Koneksi & Hapus Cookie Tersimpan'}
-          </button>
-        </div>
-      )}
+      {currentSession && <button type="button" onClick={disconnect} disabled={busy} className="btn-outline inline-flex w-full items-center justify-center gap-2 border-red-200 text-red-600 hover:bg-red-50"><Unplug size={15} aria-hidden="true" />Putuskan koneksi akun</button>}
     </div>
   );
 }

@@ -3,17 +3,18 @@
 
 import type { AttendanceCheck } from '@/lib/types/attendance';
 import type { NotificationLog } from '@/lib/types/reminder';
+import { Circle, CircleCheck, CircleHelp, TriangleAlert } from 'lucide-react';
 
 interface HistoryTimelineProps {
   checks: AttendanceCheck[];
   logs: NotificationLog[];
 }
 
-const STATUS_LABEL: Record<string, { icon: string; label: string; badgeClass: string }> = {
-  belum_lapor:     { icon: '🔵', label: 'Belum Lapor',       badgeClass: 'badge-pending' },
-  selesai:         { icon: '🟢', label: 'Sudah Lapor',       badgeClass: 'badge-done' },
-  unknown:         { icon: '⚪', label: 'Tidak Diketahui',   badgeClass: 'badge-unknown' },
-  session_expired: { icon: '⚠️', label: 'Sesi Kedaluwarsa', badgeClass: 'badge-unknown' },
+const STATUS_LABEL: Record<string, { icon: typeof Circle; label: string; badgeClass: string }> = {
+  belum_lapor:     { icon: Circle, label: 'Belum Lapor',       badgeClass: 'badge-pending' },
+  selesai:         { icon: CircleCheck, label: 'Sudah Lapor',       badgeClass: 'badge-done' },
+  unknown:         { icon: CircleHelp, label: 'Tidak Diketahui',   badgeClass: 'badge-unknown' },
+  session_expired: { icon: TriangleAlert, label: 'Sesi Kedaluwarsa', badgeClass: 'badge-unknown' },
 };
 
 export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) {
@@ -56,8 +57,8 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
               <time dateTime={day} className="text-sm font-semibold text-text-primary">
                 {formatDate(day)}
               </time>
-              <span className={cfg.badgeClass} role="img" aria-label={cfg.label}>
-                <span aria-hidden="true">{cfg.icon}</span> {cfg.label}
+              <span className={cfg.badgeClass}>
+                <cfg.icon size={14} aria-hidden="true" /> {cfg.label}
               </span>
             </div>
 

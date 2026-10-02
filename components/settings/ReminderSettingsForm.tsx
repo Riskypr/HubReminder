@@ -5,6 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useState } from 'react';
+import { BellRing, Plus, Send } from 'lucide-react';
+import { toast } from 'react-toastify';
 import {
   REMINDER_INTERVAL_OPTIONS,
   REMINDER_INTERVAL_SECONDS,
@@ -61,11 +63,13 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
           success: true,
           message: `✓ Berhasil! Notifikasi telah dikirim ke ${data.sentToDevices || 1} perangkat terdaftar. Cek bilah notifikasi Anda.`,
         });
+        toast.success('Notifikasi uji coba berhasil dikirim.');
       } else {
         setTestResult({
           success: false,
           message: data.error || 'Gagal mengirim notifikasi tes.',
         });
+        toast.error(data.error || 'Gagal mengirim notifikasi tes.');
       }
     } catch (err: unknown) {
       const error = err as Error;
@@ -73,6 +77,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
         success: false,
         message: error.message || 'Terjadi kesalahan saat memanggil API.',
       });
+      toast.error(error.message || 'Terjadi kesalahan saat memanggil API.');
     } finally {
       setTestingPush(false);
     }
@@ -122,8 +127,10 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setSaveError(body.error ?? 'Gagal menyimpan pengaturan');
+      toast.error(body.error ?? 'Gagal menyimpan pengaturan');
     } else {
       setSaved(true);
+      toast.success('Pengaturan reminder berhasil disimpan.');
     }
   }
 
@@ -214,7 +221,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
                 className="input flex-1"
                 aria-label="Waktu reminder baru"
               />
-              <button type="button" onClick={addReminderTime} className="btn-outline shrink-0">Tambah</button>
+              <button type="button" onClick={addReminderTime} className="btn-outline shrink-0 inline-flex items-center gap-1"><Plus size={15} aria-hidden="true" />Tambah</button>
             </div>
             <ul className="space-y-2" aria-label="Daftar waktu reminder">
               {reminderTimes.map((time) => (
@@ -275,7 +282,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       <div className="card space-y-3 pt-4 border-t border-border mt-6">
         <div>
           <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
-            <span aria-hidden="true">🔔</span> Uji Coba Pengingat (Push Notification)
+            <BellRing size={16} aria-hidden="true" /> Uji Coba Pengingat (Push Notification)
           </h3>
           <p className="text-xs text-text-secondary mt-1">
             Kirimkan satu notifikasi uji coba langsung ke perangkat ini untuk memastikan suara dan banner reminder bekerja.
@@ -302,7 +309,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
           disabled={testingPush}
           className="btn-outline w-full text-xs font-semibold flex items-center justify-center gap-2"
         >
-          {testingPush ? 'Mengirim notifikasi...' : '🚀 Kirim Tes Notifikasi ke HP/Browser'}
+          {testingPush ? 'Mengirim notifikasi...' : <><Send size={14} aria-hidden="true" /> Kirim Tes Notifikasi ke HP/Browser</>}
         </button>
       </div>
     </form>

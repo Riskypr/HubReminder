@@ -15,6 +15,22 @@ export function formatDate(iso: string, tz = DEFAULT_TIMEZONE): string {
   return format(zoned, 'd MMM yyyy', { locale: id });
 }
 
+/** Format rentang tanggal MagangHub ke bentuk lengkap bahasa Indonesia. */
+export function formatInternshipPeriod(period: string | null | undefined): string | null {
+  if (!period) return null;
+  const dates = period.split(/\s+(?:–|—|-)\s+/);
+  if (dates.length !== 2) return period;
+  const formatPart = (value: string) => {
+    const normalized = value.trim().slice(0, 10);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(normalized)
+      ? new Date(`${normalized}T12:00:00`)
+      : new Date(value);
+    return Number.isNaN(date.getTime()) ? null : format(date, 'd MMMM yyyy', { locale: id });
+  };
+  const [start, end] = dates.map(formatPart);
+  return start && end ? `${start} - ${end}` : period;
+}
+
 /**
  * Format waktu ke "HH:mm" (misal: "14:30")
  */

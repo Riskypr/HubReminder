@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getTodayStatus, getLatestStatusCheck, getTodayNotificationSummary } from '@/lib/services/historyService';
-import { getSessionStatus, getDecryptedSessionCookie } from '@/lib/services/accountService';
+import { getSessionStatus, getDecryptedSession } from '@/lib/services/accountService';
 import { getReminderSettings } from '@/lib/services/reminderSettingsService';
 import { getUserProfile } from '@/lib/services/profileService';
 import { checkAndUpdateAttendance } from '@/lib/services/maganghubService';
@@ -12,6 +12,7 @@ import SessionExpiredBanner from '@/components/dashboard/SessionExpiredBanner';
 import PermissionPromptWrapper from '@/components/dashboard/PermissionPromptWrapper';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 
 export const metadata = {
   title: 'Dashboard — HubReminder',
@@ -50,9 +51,9 @@ export default async function DashboardPage() {
   // Lakukan pengecekan otomatis saat membuka dashboard
   if (!isNotConnected && !isSessionExpired && !todayCheck) {
     try {
-      const rawCookie = await getDecryptedSessionCookie(user.id, supabase);
-      if (rawCookie) {
-        const checkResult = await checkAndUpdateAttendance(user.id, rawCookie, supabase);
+      const sessionMaterial = await getDecryptedSession(user.id, supabase);
+      if (sessionMaterial) {
+        const checkResult = await checkAndUpdateAttendance(user.id, sessionMaterial, supabase);
         if (checkResult.success && checkResult.status !== 'unknown') {
           todayCheck = {
             id: 'auto-today',
@@ -103,7 +104,7 @@ export default async function DashboardPage() {
         id="btn-open-maganghub"
         className="btn-primary w-full flex items-center justify-center gap-2"
       >
-        <span aria-hidden="true">📋</span>
+        <ArrowUpRight size={17} aria-hidden="true" />
         Buka MagangHub & Isi Laporan
       </a>
 

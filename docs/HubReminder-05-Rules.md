@@ -19,9 +19,9 @@
 - Komponen dasar hanya didefinisikan di `components/ui/`.
 
 ### 1.4 Data & Keamanan (Kritis)
-- Cookie sesi MagangHub **wajib dienkripsi** sebelum disimpan ke Postgres (`lib/utils/crypto.ts` atau Supabase Vault) — dilarang menyimpan/mengembalikan nilai plaintext ke client.
-- **Dilarang keras** melakukan `console.log`, logging, atau tracing yang mencetak isi cookie/sesi mentah, baik di server maupun Edge Function.
-- Semua akses ke tabel `maganghub_sessions` dari sisi aplikasi (bukan Edge Function) hanya boleh lewat service layer yang tidak pernah mengembalikan kolom `encrypted_cookie` ke response API/client.
+- Access dan refresh token MagangHub **wajib dienkripsi** sebelum disimpan ke Postgres (`lib/utils/crypto.ts` atau Supabase Vault) — dilarang menyimpan kata sandi atau mengembalikan material autentikasi ke client.
+- **Dilarang keras** melakukan `console.log`, logging, atau tracing yang mencetak isi sesi/token mentah, baik di server maupun Edge Function.
+- Semua akses ke tabel `maganghub_sessions` dari sisi aplikasi (bukan Edge Function) hanya boleh lewat service layer yang tidak pernah mengembalikan token terenkripsi atau plaintext ke response API/client.
 - Frekuensi pengecekan (`pg_cron`) tidak boleh lebih sering dari interval minimum yang disepakati (mis. tidak kurang dari 5–10 menit) untuk menghindari beban berlebih ke server MagangHub dan risiko akun dianggap aktivitas mencurigakan.
 - Setiap fetch ke domain eksternal (`monev.maganghub.kemnaker.go.id`) wajib menyertakan timeout & error handling — jangan biarkan Edge Function menggantung jika situs eksternal lambat/down.
 
@@ -36,18 +36,18 @@
 
 ## 2. Style Guide Tambahan
 - Bahasa UI: Bahasa Indonesia.
-- Format waktu: 24 jam (`HH:mm`), format tanggal `d MMM yyyy`, timezone mengikuti `profiles.timezone` (default WITA/WIB sesuai lokasi user).
+- Format waktu: 24 jam (`HH:mm`), periode magang `d MMMM yyyy`, timezone mengikuti `profiles.timezone` (default `Asia/Jakarta`).
 - Pesan notifikasi push singkat & actionable, contoh: **"Laporan hari ini belum diisi — tap untuk isi sekarang."** (bukan pesan generik seperti "Ada pembaruan").
 - Semua pesan error harus menjelaskan tindakan lanjutan (mis. "Sesi kedaluwarsa, silakan hubungkan ulang di menu Setting").
 
 ## 3. Batasan AI (AI Boundaries)
 
 1. **Dilarang mengimplementasikan fitur auto-submit/auto-isi laporan harian secara otomatis atas nama pengguna.** Aplikasi ini murni alat pengingat (reminder), bukan alat pengisian otomatis — batasan ini permanen kecuali pemilik project mengubah scope secara eksplisit di `PRD.md`.
-2. **Dilarang menyimpan username/password asli MagangHub** dalam bentuk apa pun. Metode resmi MVP hanya cookie/sesi terenkripsi (Opsi A di `Architecture.md`).
+2. **Dilarang menyimpan username/password MagangHub.** Kredensial hanya boleh dikirim sementara dari backend proxy ke endpoint login MagangHub; token hasilnya harus dienkripsi sebelum disimpan.
 3. **Dilarang menambah scraping ke akun/data milik pengguna lain** — sistem didesain single-account-per-user, AI tidak boleh menambahkan fitur yang memungkinkan satu instance memantau akun orang lain tanpa consent eksplisit terpisah.
 4. **Dilarang menurunkan frekuensi minimum polling** (interval pengecekan) di bawah ambang yang sudah disepakati di `Rules.md` §1.4 tanpa persetujuan eksplisit — untuk menjaga kewajaran beban ke server eksternal.
 5. **Dilarang mengubah skema enkripsi/penyimpanan sesi** (`Schema.md` §2.2) tanpa menyertakan penjelasan dampak keamanan pada ringkasan perubahan.
-6. **Dilarang menambahkan pemanggilan API/analytics pihak ketiga** yang mengirim data pengguna (termasuk cookie sesi atau HTML dashboard) ke luar infrastruktur Supabase milik project ini.
+6. **Dilarang menambahkan pemanggilan API/analytics pihak ketiga** yang mengirim data pengguna (termasuk kredensial, token sesi, atau HTML dashboard) ke luar endpoint resmi MagangHub dan infrastruktur Supabase project ini.
 7. **Wajib memperbarui dokumen terkait** (`Architecture.md`, `Schema.md`, `Design.md`) bila ada perubahan struktur folder, skema data, atau alur inti (job checker, push notification).
 8. AI boleh mengusulkan penyesuaian selector/parser (`parseStatus`) bila struktur HTML MagangHub berubah, namun **wajib disertai catatan versi/tanggal perubahan** agar mudah dilacak bila situs berubah lagi.
 9. **Perubahan besar** (menyentuh Edge Function inti atau skema keamanan) wajib disertai ringkasan: apa yang berubah, kenapa, dan dampaknya — **tidak boleh dieksekusi langsung tanpa konfirmasi** pemilik project.

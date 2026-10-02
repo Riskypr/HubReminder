@@ -6,6 +6,8 @@
 |---|---|---|
 | Framework | Next.js 14+ (App Router, TypeScript) | Frontend + API routes ringan, mendukung PWA |
 | Styling | Tailwind CSS | Utility-first, mobile-first |
+| Icons & alerts | lucide-react, react-toastify | Ikon konsisten dan notifikasi aksi |
+| Icons & alerts | lucide-react, react-toastify | Ikon konsisten dan feedback aksi yang aksesibel |
 | Backend/DB | **Supabase** (Postgres, Auth, Edge Functions, Storage) | Sesuai preferensi user; sudah termasuk Auth & scheduler |
 | Scheduler | Supabase **pg_cron** + Edge Function | Menjalankan job pengecekan status berkala |
 | HTML Parsing | Cheerio (dijalankan di Edge Function/Node runtime) | Parsing elemen tombol laporan dari HTML dashboard MagangHub |
@@ -19,10 +21,7 @@
 
 ## 2. Metode Pengambilan Data dari MagangHub
 
-Karena dashboard MagangHub berada di balik login, ada dua opsi — MVP memilih **Opsi A**:
-
-- **Opsi A (MVP): Sesi/cookie manual.** Pengguna login manual satu kali di browser mereka, lalu menyalin nilai cookie sesi ke form "Hubungkan Akun" di HubReminder. Server menggunakan cookie ini untuk mengambil (fetch) halaman dashboard secara berkala atas nama pengguna. Lebih aman karena aplikasi **tidak pernah menyimpan username/password**.
-- **Opsi B (Future, tidak untuk MVP):** Otomasi login penuh (submit form username/password oleh sistem). Ditunda karena risiko keamanan lebih tinggi (perlu menyimpan kredensial asli) dan lebih rentan terhadap perubahan mekanisme login/captcha di situs.
+Pengguna memasukkan kredensial MagangHub pada halaman pengaturan akun. API proxy server mengirimkannya ke endpoint autentikasi yang dikonfigurasi lewat `MAGANGHUB_LOGIN_PATH`, memvalidasi access token ke endpoint profil, lalu menyimpan access dan refresh token dalam bentuk terenkripsi. Kata sandi tidak disimpan. Checker menggunakan refresh token saat access token kedaluwarsa dan memperbarui token tersimpan.
 
 Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard mengembalikan halaman login (bukan dashboard) → status ditandai `session_expired` → notifikasi khusus dikirim ke pengguna untuk menghubungkan ulang.
 
@@ -38,7 +37,7 @@ Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard meng
 │   │   │   └── account/page.tsx         # Hubungkan/putuskan akun MagangHub
 │   ├── api/
 │   │   ├── push/subscribe/route.ts      # Simpan push subscription browser
-│   │   └── account/connect/route.ts     # Simpan sesi (cookie) terenkripsi
+│   │   └── maganghub/login/route.ts     # Proxy login kredensial dan penyimpanan token terenkripsi
 │   ├── layout.tsx
 │   ├── manifest.ts
 │   └── sw-push.ts                        # Custom service worker push handler
@@ -65,7 +64,7 @@ Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard meng
 │   │   ├── pushService.ts                # Subscribe/unsubscribe push
 │   │   └── historyService.ts
 │   └── utils/
-│       ├── crypto.ts                     # Enkripsi/dekripsi cookie sesi
+│       ├── crypto.ts                     # Enkripsi/dekripsi token sesi
 │       └── time.ts
 ├── supabase/
 │   ├── functions/
@@ -82,10 +81,11 @@ Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard meng
 
 ### 4.1 Flow: Hubungkan Akun
 ```
-[ConnectAccountForm] → POST /api/account/connect
-   → accountService.saveSession(userId, cookieValue)
-       → crypto.encrypt(cookieValue) → simpan ke tabel maganghub_sessions
-   → Edge Function langsung trigger 1x verifikasi (fetch dashboard test)
+[ConnectAccountForm] → POST /api/maganghub/login
+   → POST /api/maganghub/login
+   → autentikasi server ke MagangHub, verifikasi profil, encrypt token
+   → simpan encrypted_session dan encrypted_refresh_token di maganghub_sessions
+   → Edge Function memeriksa sesi secara berkala
        → jika berhasil parse tombol → status "connected"
        → jika dapat halaman login → status "invalid_session" (minta ulang)
 ```
@@ -95,8 +95,8 @@ Sesi memiliki masa berlaku terbatas; sistem mendeteksi bila fetch dashboard meng
 [pg_cron] ── setiap N menit ──▶ [Edge Function: check-attendance]
    1. Ambil semua user dengan sesi aktif (maganghub_sessions.status = 'valid')
    2. Untuk tiap user:
-      a. Dekripsi cookie sesi
-      b. Fetch HTML dashboard MagangHub dengan cookie tsb
+      a. Dekripsi access token dan refresh token
+      b. Fetch API MagangHub dan perbarui access token jika perlu
       c. Jika response = halaman login → tandai sesi 'expired', kirim 1x notifikasi "sesi habis"
       d. Jika response = dashboard → parse elemen tombol laporan:
          - class mengandung indikator biru → status = 'belum_lapor'
@@ -133,7 +133,7 @@ Pengguna memilih waktu reminder dengan presisi menit (HH:MM) karena cron-job.org
 - Tidak ada logging nilai cookie mentah di log server manapun.
 
 ## 5.1 Reminder Grup WhatsApp
-`cron-job.org` memanggil `POST /api/cron/reminder` dengan header `X-Cron-Secret`. Endpoint memvalidasi secret secara constant-time, membaca sesi valid dan status attendance terakhir dari Supabase menggunakan `service_role`, lalu mengirim ringkasan melalui Foonte. Endpoint tidak memanggil MagangHub atau meneruskan cookie sesi, sehingga target eksekusi tetap singkat. Respons pengiriman disimpan di `reminder_logs`.
+`cron-job.org` memanggil `POST /api/cron/reminder` dengan header `X-Cron-Secret`. Endpoint memvalidasi secret secara constant-time, membaca sesi valid dan status attendance terakhir dari Supabase menggunakan `service_role`, lalu mengirim ringkasan melalui Foonte. Endpoint tidak memanggil MagangHub atau meneruskan token sesi, sehingga target eksekusi tetap singkat. Respons pengiriman disimpan di `reminder_logs`.
 
 ## 6. PWA & Push Notification Setup
 - `manifest.ts`: nama app, ikon, `display: standalone`, `theme_color`.

@@ -3,7 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { getDecryptedSessionCookie } from '@/lib/services/accountService';
+import { getDecryptedSession } from '@/lib/services/accountService';
 import { syncUserProfileFromMagangHub } from '@/lib/services/maganghubService';
 
 export const dynamic = 'force-dynamic';
@@ -19,15 +19,15 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const rawCookie = await getDecryptedSessionCookie(user.id, supabase);
-  if (!rawCookie) {
+  const sessionMaterial = await getDecryptedSession(user.id, supabase);
+  if (!sessionMaterial) {
     return NextResponse.json(
       { error: 'Akun MagangHub belum terhubung atau sesi telah kedaluwarsa' },
       { status: 400 }
     );
   }
 
-  const syncResult = await syncUserProfileFromMagangHub(user.id, rawCookie, supabase);
+  const syncResult = await syncUserProfileFromMagangHub(user.id, sessionMaterial, supabase);
 
   if (!syncResult.success) {
     return NextResponse.json(

@@ -4,7 +4,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-toastify';
+import { CalendarDays, RefreshCw } from 'lucide-react';
 import type { Profile } from '@/lib/types/session';
+import { formatInternshipPeriod } from '@/lib/utils/time';
 
 interface ProfileCardProps {
   profile: Profile | null;
@@ -26,12 +29,15 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
       const data = await res.json().catch(() => null);
       if (res.ok) {
         setSyncMessage('✓ Profil berhasil disinkronkan');
+        toast.success('Profil berhasil disinkronkan.');
         router.refresh();
       } else {
         setSyncMessage(data?.error || 'Gagal sinkronisasi');
+        toast.error(data?.error || 'Gagal sinkronisasi');
       }
     } catch {
       setSyncMessage('Koneksi bermasalah saat sinkronisasi');
+      toast.error('Koneksi bermasalah saat sinkronisasi.');
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncMessage(null), 3000);
@@ -40,7 +46,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
 
   const name = profile?.full_name || 'Peserta Magang';
   const company = profile?.company_name || 'Instansi / Perusahaan Magang';
-  const period = profile?.internship_period;
+  const period = formatInternshipPeriod(profile?.internship_period);
   const status = profile?.participant_status || 'Aktif';
   const syncedTime = profile?.maganghub_synced_at
     ? new Date(profile.maganghub_synced_at).toLocaleTimeString('id-ID', {
@@ -87,7 +93,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
             <p className="text-xs text-text-secondary truncate mt-0.5">{company}</p>
             {period && (
               <p className="text-[11px] text-text-muted mt-0.5">
-                📅 {period}
+                <span className="inline-flex items-center gap-1"><CalendarDays size={13} aria-hidden="true" />{period}</span>
               </p>
             )}
           </div>
@@ -100,7 +106,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
           title="Sinkronkan data profil dari MagangHub"
           id="btn-sync-profile"
         >
-          <span className={`inline-block ${isSyncing ? 'animate-spin' : ''}`}>🔄</span>
+          <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
           <span>{isSyncing ? 'Sinkron...' : 'Sync'}</span>
         </button>
       </div>

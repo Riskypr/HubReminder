@@ -1,18 +1,20 @@
 // lib/services/maganghubService.ts
 // Backend Proxy Service untuk berkomunikasi dengan MagangHub Kemnaker API & Dashboard.
-// PENTING: Kredensial & cookie sesi hanya diproses di server, tidak pernah diteruskan ke client.
+// PENTING: Kredensial dan token sesi hanya diproses di server, tidak pernah diteruskan ke client.
 
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { parseApiResponse, parseStatus, type MagangHubHomeApiData } from '@/lib/attendance/parser';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 import type { Profile } from '@/lib/types/session';
+import { updateSessionTokens } from '@/lib/services/accountService';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 const MAGANGHUB_API_BASE = 'https://monev-api.maganghub.kemnaker.go.id/api/v1';
 const MAGANGHUB_FRONTEND_BUILD_ID = 'fdce5864ab936c3205233ffc340ba593c0136cd2-production';
 const TIMEOUT_MS = 12000;
+const LOGIN_TIMEOUT_MS = 30000;
 
 export interface MagangHubUserData {
   id?: number | string;
@@ -31,22 +33,309 @@ export interface MagangHubUserData {
   };
 }
 
+export interface MagangHubAuthTokens {
+  accessToken: string;
+  refreshToken: string | null;
+}
+
+type SessionCookie = { name: string; value: string; domain: string; path: string };
+
+function isOfficialKemnakerUrl(url: URL): boolean {
+  return url.protocol === 'https:' &&
+    (url.hostname === 'kemnaker.go.id' || url.hostname.endsWith('.kemnaker.go.id'));
+}
+
+function getSetCookies(response: Response): string[] {
+  if (typeof response.headers.getSetCookie === 'function') return response.headers.getSetCookie();
+  const setCookie = response.headers.get('set-cookie');
+  return setCookie ? [setCookie] : [];
+}
+
+function addResponseCookies(jar: SessionCookie[], response: Response, responseUrl: URL): void {
+  for (const header of getSetCookies(response)) {
+    const [first, ...attributes] = header.split(';').map((value) => value.trim());
+    const separator = first.indexOf('=');
+    if (separator <= 0) continue;
+    const name = first.slice(0, separator);
+    const value = first.slice(separator + 1);
+    const domainAttribute = attributes.find((attribute) => attribute.toLowerCase().startsWith('domain='));
+    const pathAttribute = attributes.find((attribute) => attribute.toLowerCase().startsWith('path='));
+    const domain = (domainAttribute?.slice('domain='.length) || responseUrl.hostname).replace(/^\./, '').toLowerCase();
+    const path = pathAttribute?.slice('path='.length) || '/';
+    const existingIndex = jar.findIndex((cookie) => cookie.name === name && cookie.domain === domain && cookie.path === path);
+    const cookie = { name, value, domain, path };
+    if (existingIndex >= 0) jar[existingIndex] = cookie;
+    else jar.push(cookie);
+  }
+}
+
+function cookieHeaderForUrl(jar: SessionCookie[], url: URL): string {
+  return jar
+    .filter((cookie) => (url.hostname === cookie.domain || url.hostname.endsWith(`.${cookie.domain}`)) && url.pathname.startsWith(cookie.path))
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join('; ');
+}
+
+function getCsrfToken(html: string): string | null {
+  return html.match(/<meta\s+name=["']csrf-token["']\s+content=["']([^"']+)["']/i)?.[1] ?? null;
+}
+
+function tokenFromCookies(cookies: SessionCookie[]): MagangHubAuthTokens | null {
+  const accessToken = cookies.find((cookie) => /^(?:monev-access-token|access_token)$/i.test(cookie.name))?.value;
+  const refreshToken = cookies.find((cookie) => /^(?:monev-refresh-token|refresh_token)$/i.test(cookie.name))?.value ?? null;
+  return accessToken ? { accessToken, refreshToken } : null;
+}
+
+function describeLoginConnectionError(error: unknown): string {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return 'Login SIAPKerja melewati batas waktu. Coba lagi beberapa saat.';
+  }
+  const cause = error instanceof Error ? error.cause as { code?: unknown } | undefined : undefined;
+  switch (cause?.code) {
+    case 'ENOTFOUND':
+      return 'Domain server SIAPKerja tidak dapat ditemukan.';
+    case 'ECONNREFUSED':
+      return 'Server SIAPKerja menolak koneksi.';
+    case 'UND_ERR_CONNECT_TIMEOUT':
+    case 'ETIMEDOUT':
+      return 'Koneksi ke server SIAPKerja melewati batas waktu.';
+    case 'ECONNRESET':
+      return 'Koneksi ke server SIAPKerja terputus. Coba lagi beberapa saat.';
+    default:
+      return 'Tidak dapat menyelesaikan koneksi ke server SIAPKerja. Coba lagi beberapa saat.';
+  }
+}
+
+function resolveMagangHubLoginUrl(configuredPath: string): URL {
+  const target = /^https?:\/\//i.test(configuredPath)
+    ? new URL(configuredPath)
+    : new URL(configuredPath.startsWith('/') ? configuredPath : `/${configuredPath}`, MAGANGHUB_API_BASE);
+
+  if (target.protocol !== 'https:' ||
+    !(target.hostname === 'kemnaker.go.id' || target.hostname.endsWith('.kemnaker.go.id'))) {
+    throw new Error('MAGANGHUB_LOGIN_PATH harus mengarah ke HTTPS pada domain resmi *.kemnaker.go.id.');
+  }
+  return target;
+}
+
+async function followSsoRedirect(
+  startUrl: URL,
+  cookieJar: SessionCookie[],
+  signal: AbortSignal
+): Promise<MagangHubAuthTokens | null> {
+  let currentUrl = startUrl;
+
+  for (let redirectCount = 0; redirectCount < 6; redirectCount += 1) {
+    if (!isOfficialKemnakerUrl(currentUrl)) {
+      throw new Error('Redirect autentikasi menuju domain yang tidak diizinkan.');
+    }
+    const response = await fetch(currentUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+        'User-Agent': 'HubReminder/1.0',
+        ...(cookieHeaderForUrl(cookieJar, currentUrl) ? { Cookie: cookieHeaderForUrl(cookieJar, currentUrl) } : {}),
+      },
+      redirect: 'manual',
+      signal,
+    });
+    addResponseCookies(cookieJar, response, currentUrl);
+    const fromCookies = tokenFromCookies(cookieJar);
+    if (fromCookies) return fromCookies;
+
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
+      currentUrl = new URL(location, currentUrl);
+      continue;
+    }
+
+    const finalUrlToken = currentUrl.searchParams.get('access_token') ?? currentUrl.searchParams.get('token');
+    if (finalUrlToken) {
+      return {
+        accessToken: finalUrlToken,
+        refreshToken: currentUrl.searchParams.get('refresh_token'),
+      };
+    }
+    return null;
+  }
+
+  throw new Error('Redirect autentikasi MagangHub melebihi batas.');
+}
+
+async function loginThroughKemnakerSso(
+  loginUrl: URL,
+  email: string,
+  password: string,
+  signal: AbortSignal
+): Promise<{ tokens?: MagangHubAuthTokens; error?: string }> {
+  const cookieJar: SessionCookie[] = [];
+  const loginPage = await fetch(loginUrl, {
+    method: 'GET',
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'User-Agent': 'HubReminder/1.0',
+    },
+    redirect: 'manual',
+    signal,
+  });
+  addResponseCookies(cookieJar, loginPage, loginUrl);
+  if (!loginPage.ok) {
+    return { error: `Halaman login SIAPKerja merespons HTTP ${loginPage.status}.` };
+  }
+  const csrfToken = getCsrfToken(await loginPage.text());
+  if (!csrfToken) {
+    return { error: 'Halaman login SIAPKerja tidak memberikan token keamanan CSRF.' };
+  }
+
+  const response = await fetch(loginUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-TOKEN': csrfToken,
+      Referer: loginUrl.toString(),
+      'User-Agent': 'HubReminder/1.0',
+      Cookie: cookieHeaderForUrl(cookieJar, loginUrl),
+    },
+    body: JSON.stringify({ username: email, password }),
+    redirect: 'manual',
+    signal,
+  });
+  addResponseCookies(cookieJar, response, loginUrl);
+  const payload = await response.json().catch(() => null);
+  const redirectUri = payload?.data?.redirect_uri;
+  if (!response.ok) {
+    const message = payload?.errors?.username?.[0] ?? payload?.message;
+    if (response.status === 401 || response.status === 422) {
+      return { error: typeof message === 'string' ? message : 'Akun SIAPKerja atau kata sandi tidak dapat diverifikasi.' };
+    }
+    return { error: typeof message === 'string' ? message : `Login SIAPKerja ditolak (HTTP ${response.status}).` };
+  }
+  if (typeof redirectUri !== 'string' || !redirectUri) {
+    return { error: 'Login SIAPKerja berhasil, tetapi tidak memberikan redirect ke sesi MagangHub.' };
+  }
+
+  const tokens = await followSsoRedirect(new URL(redirectUri), cookieJar, signal);
+  return tokens
+    ? { tokens }
+    : { error: 'Login SIAPKerja berhasil, tetapi sesi Monev MagangHub belum menghasilkan access token.' };
+}
+
+/** Credential hanya dikirim server ke endpoint autentikasi MagangHub. */
+export async function loginToMagangHub(email: string, password: string): Promise<{
+  tokens?: MagangHubAuthTokens;
+  error?: string;
+}> {
+  const configuredPath = process.env.MAGANGHUB_LOGIN_PATH || '/auth/login';
+  let loginUrl: URL;
+  try {
+    loginUrl = resolveMagangHubLoginUrl(configuredPath);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Konfigurasi endpoint login MagangHub tidak valid.' };
+  }
+  const loginPath = loginUrl.pathname;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOGIN_TIMEOUT_MS);
+  try {
+    if (loginUrl.hostname === 'account.kemnaker.go.id') {
+      return await loginThroughKemnakerSso(loginUrl, email, password, controller.signal);
+    }
+
+    const response = await fetch(loginUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Origin: 'https://monev.maganghub.kemnaker.go.id',
+        Referer: 'https://monev.maganghub.kemnaker.go.id/',
+        'X-Frontend-Build-ID': MAGANGHUB_FRONTEND_BUILD_ID,
+      },
+      body: JSON.stringify({ email, password }),
+      redirect: 'manual',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    const auth = payload?.data?.tokens ?? payload?.data ?? payload?.tokens ?? payload;
+    const cookies = typeof response.headers.getSetCookie === 'function'
+      ? response.headers.getSetCookie().join('; ')
+      : response.headers.get('set-cookie') || '';
+    const accessCookie = cookies.match(/(?:monev-access-token|access_token)=([^;]+)/i)?.[1];
+    const refreshCookie = cookies.match(/(?:monev-refresh-token|refresh_token)=([^;]+)/i)?.[1];
+    const nestedToken = typeof auth?.token === 'object' && auth.token !== null ? auth.token : null;
+    const accessToken = auth?.access_token ?? auth?.accessToken ?? nestedToken?.access_token ?? nestedToken?.accessToken ?? auth?.token ?? accessCookie;
+    const refreshToken = auth?.refresh_token ?? auth?.refreshToken ?? nestedToken?.refresh_token ?? nestedToken?.refreshToken ?? refreshCookie ?? null;
+    if (!response.ok) {
+      console.warn('[maganghub/login] Upstream login rejected request:', {
+        host: loginUrl.hostname,
+        path: loginPath,
+        status: response.status,
+      });
+      if (response.status === 401 || response.status === 403) {
+        return { error: `Server login MagangHub membalas HTTP ${response.status}. Ini belum memastikan email/kata sandi salah; periksa path dan format autentikasi (${loginPath}).` };
+      }
+      if (response.status === 404) {
+        return { error: `Endpoint login MagangHub tidak ditemukan (HTTP 404): ${loginPath}. Periksa MAGANGHUB_LOGIN_PATH.` };
+      }
+      if (response.status === 400 || response.status === 422) {
+        return { error: `Format request login ditolak MagangHub (HTTP ${response.status}). Path atau field kredensial mungkin berbeda.` };
+      }
+      if (response.status >= 300 && response.status < 400) {
+        return { error: `Endpoint login mengalihkan request (HTTP ${response.status}). Gunakan endpoint API autentikasi langsung, bukan halaman redirect/SSO.` };
+      }
+      return { error: `Server login MagangHub merespons HTTP ${response.status}. Coba lagi nanti atau periksa endpoint autentikasi.` };
+    }
+    if (typeof accessToken !== 'string' || !accessToken) {
+      console.warn('[maganghub/login] Successful response did not include a recognized access token:', {
+        path: loginPath,
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+      });
+      return { error: `Login endpoint membalas HTTP ${response.status}, tetapi access token tidak ditemukan pada body/header. Format respons autentikasi perlu disesuaikan.` };
+    }
+    return { tokens: { accessToken, refreshToken: typeof refreshToken === 'string' ? refreshToken : null } };
+  } catch (error) {
+    console.warn('[maganghub/login] SSO connection failed:', {
+      host: loginUrl.hostname,
+      reason: error instanceof Error ? error.name : 'unknown',
+      code: error instanceof Error && error.cause && typeof error.cause === 'object' && 'code' in error.cause
+        ? (error.cause as { code?: string }).code
+        : undefined,
+    });
+    return { error: describeLoginConnectionError(error) };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Ekstrak token JWT dan buat header cookie yang bersih & kompatibel dengan MagangHub.
  */
 export function extractAuthInfo(cookieStr: string): {
   cookieHeader: string;
   bearerToken: string | null;
+  refreshToken: string | null;
 } {
   const cleanStr = cookieStr.trim();
   let bearerToken: string | null = null;
+  let refreshToken: string | null = null;
+  let parsedSession = false;
+
+  try {
+    const session = JSON.parse(cleanStr) as { accessToken?: unknown; refreshToken?: unknown };
+    if (typeof session.accessToken === 'string') bearerToken = session.accessToken;
+    if (typeof session.refreshToken === 'string') refreshToken = session.refreshToken;
+    parsedSession = typeof session.accessToken === 'string';
+  } catch {
+    // Legacy token/cookie strings remain supported during the migration.
+  }
 
   // 1. Ekstrak JWT (format eyJ...) di mana pun posisinya dalam string
   // Mencakup: raw JWT, 'Bearer eyJ...', 'monev-access-token=eyJ...', 'access_token=eyJ...', JSON token, dsb.
   const jwtMatch = cleanStr.match(/eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+/);
-  if (jwtMatch) {
+  if (!bearerToken && jwtMatch) {
     bearerToken = jwtMatch[0];
-  } else {
+  } else if (!bearerToken) {
     // 2. Fallback: Cek apakah ada cookie `access_token=...`, `token=...`, atau `session=...`
     const accessMatch = cleanStr.match(/(?:monev-access-token|monev_access_token|access_token|token|session|jwt)=([^;]+)/i);
     if (accessMatch && accessMatch[1]) {
@@ -55,11 +344,11 @@ export function extractAuthInfo(cookieStr: string): {
   }
 
   // 3. Format cookieHeader agar MagangHub mengenali token sesi
-  let cookieHeader = cleanStr;
+  let cookieHeader = parsedSession ? '' : cleanStr;
   if (bearerToken) {
-    if (!cleanStr.includes('=')) {
+    if (parsedSession || !cleanStr.includes('=')) {
       cookieHeader = `monev-access-token=${bearerToken}; access_token=${bearerToken}`;
-    } else {
+    } else if (!cleanStr.startsWith('{')) {
       // Pastikan monev-access-token ada di header karena dipakai Nuxt MagangHub
       const parts = cleanStr.split(';').map((s) => s.trim()).filter(Boolean);
       if (!parts.some((p) => p.startsWith('monev-access-token='))) {
@@ -69,7 +358,9 @@ export function extractAuthInfo(cookieStr: string): {
     }
   }
 
-  return { cookieHeader, bearerToken };
+  if (refreshToken) cookieHeader = `${cookieHeader}; refresh_token=${refreshToken}`;
+
+  return { cookieHeader, bearerToken, refreshToken };
 }
 
 /**
@@ -78,9 +369,10 @@ export function extractAuthInfo(cookieStr: string): {
 async function fetchMagangHubApi<T>(
   path: string,
   cookiePlaintext: string,
-  initOptions: RequestInit = {}
+  initOptions: RequestInit = {},
+  onTokensRefreshed?: (accessToken: string, refreshToken: string | null) => Promise<void>
 ): Promise<{ ok: boolean; status: number; data?: T; isSessionExpired?: boolean; error?: string }> {
-  const { cookieHeader, bearerToken } = extractAuthInfo(cookiePlaintext);
+  const { cookieHeader, bearerToken, refreshToken } = extractAuthInfo(cookiePlaintext);
 
   let currentToken = bearerToken;
   const url = `${MAGANGHUB_API_BASE}${path}`;
@@ -131,12 +423,15 @@ async function fetchMagangHubApi<T>(
 
         if (refreshRes.ok) {
           const refreshJson = await refreshRes.json().catch(() => null);
-          console.log('[maganghub] Refresh result:', {
-            hasAccessToken: !!refreshJson?.access_token,
-            tokenPrefix: refreshJson?.access_token?.substring(0, 20),
-          });
-          if (refreshJson?.access_token) {
-            currentToken = refreshJson.access_token;
+          const refreshedAccessToken = typeof refreshJson?.access_token === 'string'
+            ? refreshJson.access_token
+            : null;
+          if (refreshedAccessToken) {
+            currentToken = refreshedAccessToken;
+            const refreshedRefreshToken = typeof refreshJson.refresh_token === 'string'
+              ? refreshJson.refresh_token
+              : refreshToken;
+            await onTokensRefreshed?.(refreshedAccessToken, refreshedRefreshToken);
             // Retry request asli dengan access token baru
             response = await fetch(url, {
               ...initOptions,
@@ -146,8 +441,7 @@ async function fetchMagangHubApi<T>(
             console.log(`[maganghub] Retry response after refresh: ${response.status}`);
           }
         } else {
-          const refreshBody = await refreshRes.text().catch(() => '');
-          console.log('[maganghub] Refresh FAILED:', refreshRes.status, refreshBody.substring(0, 200));
+          console.log('[maganghub] Refresh rejected:', refreshRes.status);
         }
       } catch (refreshErr) {
         console.error('[maganghub] Refresh exception:', refreshErr);
@@ -184,19 +478,25 @@ async function fetchMagangHubApi<T>(
 /**
  * Fetch profil pengguna dari MagangHub (`/users/me`).
  */
-export async function fetchMagangHubProfile(cookiePlaintext: string) {
+export async function fetchMagangHubProfile(
+  cookiePlaintext: string,
+  onTokensRefreshed?: (accessToken: string, refreshToken: string | null) => Promise<void>
+) {
   return fetchMagangHubApi<MagangHubUserData>('/users/me', cookiePlaintext, {
     method: 'GET',
-  });
+  }, onTokensRefreshed);
 }
 
 /**
  * Fetch status absensi / laporan hari ini dari MagangHub (`/users/me/home`).
  */
-export async function fetchMagangHubAttendance(cookiePlaintext: string) {
+export async function fetchMagangHubAttendance(
+  cookiePlaintext: string,
+  onTokensRefreshed?: (accessToken: string, refreshToken: string | null) => Promise<void>
+) {
   return fetchMagangHubApi<MagangHubHomeApiData>('/users/me/home', cookiePlaintext, {
     method: 'GET',
-  });
+  }, onTokensRefreshed);
 }
 
 /**
@@ -209,7 +509,9 @@ export async function syncUserProfileFromMagangHub(
 ): Promise<{ success: boolean; profile?: Profile; error?: string; isSessionExpired?: boolean }> {
   const supabase = client ?? (await createClient());
 
-  const profileRes = await fetchMagangHubProfile(cookiePlaintext);
+  const persistRefreshedTokens = (accessToken: string, refreshToken: string | null) =>
+    updateSessionTokens(userId, accessToken, refreshToken, supabase);
+  const profileRes = await fetchMagangHubProfile(cookiePlaintext, persistRefreshedTokens);
 
   if (profileRes.isSessionExpired) {
     await supabase
@@ -274,7 +576,8 @@ export async function checkAndUpdateAttendance(
 
   // Jalankan pengecekan status dan sinkronisasi profil secara paralel
   const [attendanceRes, profileSyncRes] = await Promise.all([
-    fetchMagangHubAttendance(cookiePlaintext),
+    fetchMagangHubAttendance(cookiePlaintext, (accessToken, refreshToken) =>
+      updateSessionTokens(userId, accessToken, refreshToken, supabase)),
     syncUserProfileFromMagangHub(userId, cookiePlaintext, supabase).catch(() => null),
   ]);
 
@@ -305,7 +608,12 @@ export async function checkAndUpdateAttendance(
     // Jika parseApiResponse belum dapat menyimpulkan (unknown), coba periksa endpoint /attendances
     if (finalStatus === 'unknown') {
       try {
-        const attendancesRes = await fetchMagangHubApi<any>('/attendances', cookiePlaintext);
+        const attendancesRes = await fetchMagangHubApi<any>(
+          '/attendances',
+          cookiePlaintext,
+          {},
+          (accessToken, refreshToken) => updateSessionTokens(userId, accessToken, refreshToken, supabase)
+        );
         if (attendancesRes.ok && attendancesRes.data) {
           const list = Array.isArray(attendancesRes.data)
             ? attendancesRes.data

@@ -4,14 +4,14 @@ export type SessionStatus = 'valid' | 'expired' | 'unverified';
 export interface MagangHubSession {
   id: string;
   user_id: string;
-  // PENTING: encrypted_cookie TIDAK pernah dikembalikan ke client
+  // PENTING: token terenkripsi tidak pernah dikembalikan ke client
   status: SessionStatus;
   last_verified_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-// Tipe yang aman dikembalikan ke client (tanpa encrypted_cookie)
+// Tipe yang aman dikembalikan ke client (tanpa token terenkripsi)
 export type SessionPublic = Omit<MagangHubSession, never>;
 
 export interface PushSubscription {
@@ -26,7 +26,7 @@ export interface PushSubscription {
 export interface Profile {
   id: string;
   full_name: string | null;
-  timezone: string; // default 'Asia/Makassar'
+  timezone: string; // default 'Asia/Jakarta'
   company_name?: string | null;
   photo_url?: string | null;
   internship_period?: string | null;

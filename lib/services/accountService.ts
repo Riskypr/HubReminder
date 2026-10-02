@@ -1,32 +1,35 @@
 // lib/services/accountService.ts
 // Service layer untuk sesi akun MagangHub.
-// PENTING: kolom encrypted_cookie TIDAK PERNAH dikembalikan ke response API/client.
+// Token hanya disimpan terenkripsi dan tidak pernah dikembalikan ke client.
 
 import { createClient } from '@/lib/supabase/server';
-import { encryptCookie } from '@/lib/utils/crypto';
+import { encryptSessionSecret } from '@/lib/utils/crypto';
 import type { MagangHubSession, SessionStatus } from '@/lib/types/session';
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
  * Simpan (atau update) sesi MagangHub pengguna.
- * Cookie dienkripsi sebelum menyentuh database.
+ * Access dan refresh token dienkripsi sebelum menyentuh database.
  */
 export async function saveSession(
   userId: string,
-  rawCookie: string,
+  accessToken: string,
+  refreshToken: string | null = null,
   client?: SupabaseServerClient,
   initialStatus: SessionStatus = 'unverified'
 ): Promise<{ error: string | null }> {
   const supabase = client ?? (await createClient());
-  const encrypted = await encryptCookie(rawCookie);
+  const encryptedAccessToken = await encryptSessionSecret(accessToken);
+  const encryptedRefreshToken = refreshToken ? await encryptSessionSecret(refreshToken) : null;
 
   const { error } = await supabase
     .from('maganghub_sessions')
     .upsert(
       {
         user_id: userId,
-        encrypted_cookie: encrypted,
+        encrypted_session: encryptedAccessToken,
+        encrypted_refresh_token: encryptedRefreshToken,
         status: initialStatus,
         updated_at: new Date().toISOString(),
       },
@@ -38,7 +41,7 @@ export async function saveSession(
 }
 
 /**
- * Ambil status sesi (tanpa encrypted_cookie) untuk ditampilkan ke client.
+ * Ambil status sesi tanpa material autentikasi untuk ditampilkan ke client.
  */
 export async function getSessionStatus(
   userId: string,
@@ -75,10 +78,9 @@ export async function deleteSession(
 }
 
 /**
- * Mengambil dan mendekripsi cookie sesi MagangHub untuk keperluan Backend Proxy (SERVER ONLY).
- * PENTING: Plaintext cookie TIDAK BOLEH dikembalikan ke response API/client.
+ * Mengambil dan mendekripsi access token MagangHub untuk keperluan server saja.
  */
-export async function getDecryptedSessionCookie(
+export async function getDecryptedSession(
   userId: string,
   client?: SupabaseServerClient
 ): Promise<string | null> {
@@ -86,19 +88,45 @@ export async function getDecryptedSessionCookie(
 
   const { data, error } = await supabase
     .from('maganghub_sessions')
-    .select('encrypted_cookie, status')
+    .select('encrypted_session, encrypted_refresh_token, status')
     .eq('user_id', userId)
     .maybeSingle();
 
-  if (error || !data || !data.encrypted_cookie) {
+  if (error || !data || !data.encrypted_session) {
     return null;
   }
 
   try {
-    const { decryptCookie } = await import('@/lib/utils/crypto');
-    return await decryptCookie(data.encrypted_cookie);
+    const { decryptSessionSecret } = await import('@/lib/utils/crypto');
+    const accessToken = await decryptSessionSecret(data.encrypted_session);
+    const refreshToken = data.encrypted_refresh_token
+      ? await decryptSessionSecret(data.encrypted_refresh_token)
+      : null;
+    if (!refreshToken && (accessToken.includes('=') || accessToken.includes(';') || accessToken.startsWith('Bearer '))) {
+      return accessToken;
+    }
+    return JSON.stringify({ accessToken, refreshToken });
   } catch (err) {
-    console.error('Failed to decrypt session cookie:', err);
+    console.error('Failed to decrypt MagangHub session');
     return null;
   }
+}
+
+export async function updateSessionTokens(
+  userId: string,
+  accessToken: string,
+  refreshToken?: string | null,
+  client?: SupabaseServerClient
+): Promise<void> {
+  const supabase = client ?? (await createClient());
+  const encryptedSession = await encryptSessionSecret(accessToken);
+  const payload: Record<string, string | null> = {
+    encrypted_session: encryptedSession,
+    updated_at: new Date().toISOString(),
+  };
+  if (refreshToken !== undefined) {
+    payload.encrypted_refresh_token = refreshToken ? await encryptSessionSecret(refreshToken) : null;
+  }
+  const { error } = await supabase.from('maganghub_sessions').update(payload).eq('user_id', userId);
+  if (error) throw new Error('Gagal memperbarui sesi MagangHub');
 }

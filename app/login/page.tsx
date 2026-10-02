@@ -4,6 +4,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { Clock3 } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,13 +38,15 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (data.session) {
+          toast.success('Pendaftaran berhasil.');
           router.push('/');
           router.refresh();
         } else {
-          setMessage({
-            text: 'Pendaftaran berhasil! Cek email kamu untuk konfirmasi akun sebelum login.',
-            type: 'success',
-          });
+        setMessage({
+          text: 'Pendaftaran berhasil! Cek email kamu untuk konfirmasi akun sebelum login.',
+          type: 'success',
+        });
+        toast.success('Cek email kamu untuk konfirmasi akun.');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -52,6 +56,7 @@ export default function LoginPage() {
 
         if (error) throw error;
 
+        toast.success('Berhasil masuk.');
         router.push('/');
         router.refresh();
       }
@@ -61,16 +66,17 @@ export default function LoginPage() {
         text: error.message || 'Terjadi kesalahan saat otentikasi',
         type: 'error',
       });
+      toast.error(error.message || 'Terjadi kesalahan saat otentikasi.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-dvh flex flex-col justify-center px-4 py-8 max-w-sm mx-auto">
-      <div className="card space-y-6">
-        <div className="text-center space-y-1">
-          <div className="text-4xl mb-2" aria-hidden="true">⏱️</div>
+    <div className="login-shell min-h-dvh flex flex-col justify-center px-4 py-8">
+      <div className="card mx-auto w-full max-w-md space-y-6 border-white/80 p-6 shadow-xl shadow-blue-900/5 sm:p-8">
+        <div className="text-center space-y-2">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-[#7157E8] text-white shadow-lg shadow-primary/20" aria-hidden="true"><Clock3 size={27} /></div>
           <h1 className="text-2xl font-bold text-text-primary tracking-tight">HubReminder</h1>
           <p className="text-xs text-text-secondary">
             Pengingat Laporan Harian MagangHub Kemnaker
@@ -143,7 +149,7 @@ export default function LoginPage() {
             type="submit"
             id="btn-auth-submit"
             disabled={loading}
-            className="btn-primary w-full shadow-sm"
+            className="btn-primary w-full bg-gradient-to-r from-primary to-[#7157E8] shadow-md shadow-primary/20 hover:brightness-105"
           >
             {loading ? 'Memproses...' : isSignUp ? 'Daftar Akun' : 'Masuk'}
           </button>

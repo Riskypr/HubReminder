@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getUserProfile } from '@/lib/services/profileService';
-import { getDecryptedSessionCookie } from '@/lib/services/accountService';
+import { getDecryptedSession } from '@/lib/services/accountService';
 import { syncUserProfileFromMagangHub } from '@/lib/services/maganghubService';
 
 export const dynamic = 'force-dynamic';
@@ -24,9 +24,9 @@ export async function GET() {
 
   // Jika profile belum pernah disinkronkan dari MagangHub, cek apakah ada sesi aktif untuk auto-sync
   if (!profile?.maganghub_synced_at) {
-    const rawCookie = await getDecryptedSessionCookie(user.id, supabase);
-    if (rawCookie) {
-      const syncRes = await syncUserProfileFromMagangHub(user.id, rawCookie, supabase).catch(() => null);
+    const sessionMaterial = await getDecryptedSession(user.id, supabase);
+    if (sessionMaterial) {
+      const syncRes = await syncUserProfileFromMagangHub(user.id, sessionMaterial, supabase).catch(() => null);
       if (syncRes?.success && syncRes.profile) {
         profile = syncRes.profile;
       }

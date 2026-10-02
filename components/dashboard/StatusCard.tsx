@@ -4,6 +4,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { CircleHelp, CircleCheck, RefreshCw, TriangleAlert, Circle } from 'lucide-react';
+import { toast } from 'react-toastify';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 
 interface StatusCardProps {
@@ -16,31 +18,31 @@ interface StatusCardProps {
 
 const STATUS_CONFIG: Record<
   AttendanceStatus,
-  { icon: string; label: string; badgeClass: string; cardBg: string; desc: string }
+  { icon: typeof Circle; label: string; badgeClass: string; cardBg: string; desc: string }
 > = {
   belum_lapor: {
-    icon: '🔵',
+    icon: Circle,
     label: 'Belum Lapor',
     badgeClass: 'badge-pending',
     cardBg: 'border-l-4 border-l-status-pending',
     desc: 'Laporan hari ini belum diisi. Segera isi di MagangHub.',
   },
   selesai: {
-    icon: '🟢',
+    icon: CircleCheck,
     label: 'Sudah Lapor',
     badgeClass: 'badge-done',
     cardBg: 'border-l-4 border-l-status-done',
     desc: 'Laporan hari ini sudah diisi. Terima kasih!',
   },
   unknown: {
-    icon: '⚪',
+    icon: CircleHelp,
     label: 'Tidak Diketahui',
     badgeClass: 'badge-unknown',
     cardBg: 'border-l-4 border-l-status-unknown',
     desc: 'Belum ada status laporan hari ini. Klik "Cek Status" untuk memeriksa ke MagangHub.',
   },
   session_expired: {
-    icon: '⚠️',
+    icon: TriangleAlert,
     label: 'Sesi Kedaluwarsa',
     badgeClass: 'badge-unknown',
     cardBg: 'border-l-4 border-l-warning',
@@ -94,12 +96,15 @@ export default function StatusCard({
             ? '✓ Status: Belum Lapor'
             : '✓ Status diperbarui';
         setFeedback(statusMsg);
+        toast.success(statusMsg.replace(/^✓\s*/, ''));
         router.refresh();
       } else {
         setFeedback(data?.error || 'Gagal mengecek status');
+        toast.error(data?.error || 'Gagal mengecek status');
       }
     } catch {
       setFeedback('Koneksi terganggu');
+      toast.error('Koneksi terganggu saat mengecek status.');
     } finally {
       setChecking(false);
       setTimeout(() => setFeedback(null), 4000);
@@ -116,8 +121,8 @@ export default function StatusCard({
       {/* Badge status besar */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="text-4xl leading-none">
-            {config.icon}
+          <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-primary shadow-sm">
+            <config.icon size={28} strokeWidth={1.8} />
           </span>
           <div>
             <span className={config.badgeClass} role="img" aria-label={config.label}>
@@ -137,7 +142,7 @@ export default function StatusCard({
             className="text-xs text-primary hover:text-primary-dark transition-colors px-2.5 py-1.5 rounded-md hover:bg-blue-50 disabled:opacity-50 shrink-0 font-medium flex items-center gap-1 border border-primary/20"
             title="Cek status terkini langsung ke MagangHub"
           >
-            <span className={`inline-block ${checking ? 'animate-spin' : ''}`}>🔄</span>
+            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} aria-hidden="true" />
             <span>{checking ? 'Mengecek...' : 'Cek Status'}</span>
           </button>
         )}
