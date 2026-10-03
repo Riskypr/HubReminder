@@ -6,6 +6,9 @@ import { checkAndUpdateAttendance, fetchMagangHubProfile, loginToMagangHub } fro
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// MagangHub login follows an external SSO flow and then verifies the profile.
+// Allow enough time for those sequential network requests on Vercel.
+export const maxDuration = 60;
 
 const credentialsSchema = z.object({
   email: z.string().trim().email().max(254),
