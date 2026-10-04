@@ -1,9 +1,8 @@
 // components/dashboard/PermissionPrompt.tsx
-// Kartu ajakan aktifkan push notification saat pertama kali pakai
 'use client';
 
 import { useState } from 'react';
-import { BellRing } from 'lucide-react';
+import { BellRing, Check, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 interface PermissionPromptProps {
@@ -31,7 +30,6 @@ export default function PermissionPrompt({
         throw new Error('Browser ini tidak mendukung Service Worker.');
       }
 
-      // Validasi VAPID Public Key
       const cleanKey = (vapidPublicKey || '').trim().replace(/['"]/g, '');
       if (!cleanKey || cleanKey.startsWith('your-')) {
         throw new Error(
@@ -50,7 +48,6 @@ export default function PermissionPrompt({
         throw new Error('PushManager tidak tersedia pada browser ini.');
       }
 
-      // Konversi VAPID key secara aman
       const convertedVapidKey = urlBase64ToUint8Array(cleanKey);
 
       const subscription = await registration.pushManager.subscribe({
@@ -74,7 +71,7 @@ export default function PermissionPrompt({
       }
 
       onSubscribed?.();
-      toast.success('Notifikasi push berhasil diaktifkan.');
+      toast.success('Notifikasi push berhasil diaktifkan!');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Terjadi kesalahan saat mengaktifkan notifikasi';
       setError(message);
@@ -85,41 +82,56 @@ export default function PermissionPrompt({
   }
 
   return (
-    <div className="card space-y-3 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary" aria-hidden="true"><BellRing size={24} /></div>
-      <h2 className="text-base font-semibold text-text-primary">
-        Aktifkan Notifikasi Push
-      </h2>
-      <p className="text-sm text-text-secondary">
-        Izinkan HubReminder mengirim pengingat laporan harian meski aplikasi ditutup.
-      </p>
+    <div className="card relative overflow-hidden border-primary/20 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white p-5 sm:p-6 shadow-sm">
+      <div className="pointer-events-none absolute -top-12 -right-12 h-36 w-36 rounded-full bg-primary/10 blur-xl" />
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/25" aria-hidden="true">
+            <BellRing size={22} />
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-text-primary tracking-tight">
+                Aktifkan Push Notifikasi
+              </h2>
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                Direkomendasikan
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed max-w-xl">
+              Dapatkan pengingat otomatis langsung di HP/laptop saat belum mengisi absensi harian, bahkan ketika browser sedang ditutup.
+            </p>
+          </div>
+        </div>
+
+        <button
+          id="btn-enable-notifications"
+          onClick={handleEnable}
+          disabled={loading}
+          className="btn-primary shrink-0 self-start sm:self-center"
+        >
+          <BellRing size={16} aria-hidden="true" />
+          <span>{loading ? 'Memproses...' : 'Aktifkan Notifikasi'}</span>
+        </button>
+      </div>
+
       {error && (
-        <p role="alert" className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-left">
+        <p role="alert" className="mt-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
           {error}
         </p>
       )}
-      <button
-        id="btn-enable-notifications"
-        onClick={handleEnable}
-        disabled={loading}
-        className="btn-primary w-full"
-      >
-        {loading ? 'Memproses...' : 'Aktifkan Notifikasi'}
-      </button>
     </div>
   );
 }
 
-/**
- * Konversi VAPID public key dari base64url ke Uint8Array secara aman
- */
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const clean = base64String.trim().replace(/['"]/g, '');
   if (!clean) {
     throw new Error('VAPID Public Key kosong.');
   }
 
-  // Tambahkan padding base64 jika diperlukan
   const padding = '='.repeat((4 - (clean.length % 4)) % 4);
   const base64 = (clean + padding)
     .replace(/-/g, '+')

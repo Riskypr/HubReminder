@@ -31,6 +31,11 @@ export interface MagangHubUserData {
   internship_start_date?: string;
   internship_end_date?: string;
   user_type?: string;
+  position?: string;
+  role?: string;
+  division?: string;
+  job_role?: string;
+  internship_position?: string;
   participant_status?: {
     reason?: string;
     active_internship?: boolean;
@@ -138,6 +143,45 @@ function tokenFromCookies(cookies: SessionCookie[]): MagangHubAuthTokens | null 
   const accessToken = cookies.find((cookie) => /^(?:monev[-_]access[-_]token|access_token)$/i.test(cookie.name))?.value;
   const refreshToken = cookies.find((cookie) => /^(?:monev[-_]refresh[-_]token|refresh_token)$/i.test(cookie.name))?.value ?? null;
   return accessToken ? { accessToken, refreshToken } : null;
+}
+
+/**
+ * Parse only MagangHub access/refresh token cookies supplied by the account owner.
+ * Other cookies (including SIAPKerja session and CSRF cookies) are deliberately ignored.
+ */
+export function parseMagangHubCookieInput(input: string): MagangHubAuthTokens | null {
+  const allowedCookieName = /^(?:monev[-_]access[-_]token|access_token|monev[-_]refresh[-_]token|refresh_token)$/i;
+  const jwtPattern = /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/u;
+  const normalizedInput = input.trim().replace(/^(?:cookie|set-cookie):\s*/iu, '');
+  const rawToken = normalizedInput.replace(/^Bearer\s+/iu, '');
+  if (jwtPattern.test(rawToken)) return { accessToken: rawToken, refreshToken: null };
+
+  const cookieJar: SessionCookie[] = [];
+  let jwtCookieToken: string | null = null;
+
+  for (const part of normalizedInput.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator <= 0) continue;
+
+    const name = part.slice(0, separator).trim();
+    let value = part.slice(separator + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Keep the original cookie value if it is not URI-encoded.
+    }
+    if (!value || /[\s;,\r\n]/u.test(value)) continue;
+
+    if (/^(?:token|jwt)$/iu.test(name) && jwtPattern.test(value)) {
+      jwtCookieToken = value;
+      continue;
+    }
+    if (!allowedCookieName.test(name)) continue;
+
+    cookieJar.push({ name, value, domain: 'monev.maganghub.kemnaker.go.id', path: '/' });
+  }
+
+  return tokenFromCookies(cookieJar) ?? (jwtCookieToken ? { accessToken: jwtCookieToken, refreshToken: null } : null);
 }
 
 function tokensFromUrl(url: URL): MagangHubAuthTokens | null {
@@ -748,6 +792,7 @@ export async function syncUserProfileFromMagangHub(
       ? `${u.internship_start_date} – ${u.internship_end_date}`
       : null;
   const participantStatus = u.participant_status?.reason || (u.participant_status?.active_internship ? 'ACTIVE' : null);
+  const positionValue = u.position || u.internship_position || u.job_role || u.role || u.division || u.user_type || null;
 
   const updatePayload = {
     full_name: u.name || null,
@@ -755,6 +800,7 @@ export async function syncUserProfileFromMagangHub(
     photo_url: u.photo_url || null,
     internship_period: period,
     participant_status: participantStatus,
+    position: positionValue,
     maganghub_synced_at: new Date().toISOString(),
   };
 

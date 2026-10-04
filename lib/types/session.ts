@@ -28,6 +28,8 @@ export interface Profile {
   full_name: string | null;
   timezone: string; // default 'Asia/Jakarta'
   company_name?: string | null;
+  position?: string | null;
+  role?: string | null;
   photo_url?: string | null;
   internship_period?: string | null;
   participant_status?: string | null;

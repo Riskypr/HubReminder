@@ -1,11 +1,10 @@
 // components/dashboard/ProfileCard.tsx
-// Kartu Profil MagangHub hasil sinkronisasi otomatis via Backend Proxy
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
-import { CalendarDays, RefreshCw } from 'lucide-react';
+import { Briefcase, Building2, CalendarDays, CheckCircle, Clock, RefreshCw, User } from 'lucide-react';
 import type { Profile } from '@/lib/types/session';
 import { formatInternshipPeriod } from '@/lib/utils/time';
 
@@ -18,6 +17,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
   const router = useRouter();
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   if (!isConnected) return null;
 
@@ -29,25 +29,29 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
       const data = await res.json().catch(() => null);
       if (res.ok) {
         setSyncMessage('✓ Profil berhasil disinkronkan');
-        toast.success('Profil berhasil disinkronkan.');
+        setImageError(false);
+        toast.success('Profil berhasil disinkronkan dari MagangHub.');
         router.refresh();
       } else {
-        setSyncMessage(data?.error || 'Gagal sinkronisasi');
-        toast.error(data?.error || 'Gagal sinkronisasi');
+        const errorMsg = data?.error || 'Gagal sinkronisasi profil';
+        setSyncMessage(errorMsg);
+        toast.error(errorMsg);
       }
     } catch {
-      setSyncMessage('Koneksi bermasalah saat sinkronisasi');
+      setSyncMessage('Koneksi bermasalah');
       toast.error('Koneksi bermasalah saat sinkronisasi.');
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setSyncMessage(null), 3000);
+      setTimeout(() => setSyncMessage(null), 3500);
     }
   }
 
   const name = profile?.full_name || 'Peserta Magang';
+  const role = profile?.position || profile?.role || 'Posisi Magang yang Diampu';
   const company = profile?.company_name || 'Instansi / Perusahaan Magang';
   const period = formatInternshipPeriod(profile?.internship_period);
   const status = profile?.participant_status || 'Aktif';
+  const photoUrl = profile?.photo_url;
   const syncedTime = profile?.maganghub_synced_at
     ? new Date(profile.maganghub_synced_at).toLocaleTimeString('id-ID', {
         hour: '2-digit',
@@ -55,7 +59,6 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
       })
     : null;
 
-  // Inisial avatar jika tidak ada foto
   const initials = name
     .trim()
     .split(/\s+/)
@@ -65,35 +68,57 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
     .toUpperCase();
 
   return (
-    <div className="card space-y-3 bg-gradient-to-r from-blue-50/50 via-surface to-surface border border-blue-100/70 shadow-sm">
+    <div className="card relative flex h-full flex-col justify-between overflow-hidden border-slate-200/90 bg-gradient-to-br from-white via-white to-blue-50/40 p-5 shadow-sm space-y-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          {profile?.photo_url ? (
-            <img
-              src={profile.photo_url}
-              alt={name}
-              className="w-12 h-12 rounded-full object-cover border-2 border-primary/20 shrink-0"
-            />
-          ) : (
-            <div
-              className="w-12 h-12 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-sm border border-primary/20 shrink-0"
-              aria-hidden="true"
-            >
-              {initials}
-            </div>
-          )}
+        <div className="flex items-center gap-3.5 min-w-0">
+          {/* Foto Profil Pengguna dengan Fallback Avatar */}
+          <div className="relative shrink-0">
+            {photoUrl && !imageError ? (
+              <img
+                src={photoUrl}
+                alt={name}
+                onError={() => setImageError(true)}
+                className="h-14 w-14 rounded-2xl object-cover ring-2 ring-primary/25 shadow-sm"
+              />
+            ) : (
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-sm font-bold text-white shadow-md shadow-primary/20"
+                aria-hidden="true"
+              >
+                {initials || <User size={22} />}
+              </div>
+            )}
+            <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white">
+              <CheckCircle size={10} strokeWidth={3} />
+            </span>
+          </div>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base font-bold text-text-primary truncate">{name}</h1>
-              <span className="badge-done text-[10px] px-2 py-0.5 uppercase tracking-wider font-semibold">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-base font-bold text-text-primary tracking-tight">{name}</h3>
+              <span className="badge-done inline-flex items-center gap-1 text-[10px] px-2 py-0.5 uppercase tracking-wider font-semibold">
+                <CheckCircle size={11} aria-hidden="true" />
                 {status}
               </span>
             </div>
-            <p className="text-xs text-text-secondary truncate mt-0.5">{company}</p>
+
+            {/* Posisi Magang / Job Role */}
+            <p className="mt-1 flex items-center gap-1.5 truncate text-xs font-semibold text-primary">
+              <Briefcase size={13} className="shrink-0 text-primary" aria-hidden="true" />
+              <span className="truncate">{role}</span>
+            </p>
+
+            {/* Instansi Perusahaan Magang */}
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-text-secondary">
+              <Building2 size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+              <span className="truncate">{company}</span>
+            </p>
+
+            {/* Periode Magang */}
             {period && (
-              <p className="text-[11px] text-text-muted mt-0.5">
-                <span className="inline-flex items-center gap-1"><CalendarDays size={13} aria-hidden="true" />{period}</span>
+              <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+                <CalendarDays size={12} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <span>{period}</span>
               </p>
             )}
           </div>
@@ -102,12 +127,12 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
         <button
           onClick={handleSync}
           disabled={isSyncing}
-          className="text-xs text-primary hover:text-primary-dark transition-colors px-2.5 py-1.5 rounded-md hover:bg-blue-50 disabled:opacity-50 shrink-0 font-medium flex items-center gap-1 border border-primary/20"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-1.5 text-xs font-semibold text-text-secondary shadow-2xs transition hover:border-primary/40 hover:bg-blue-50/50 hover:text-primary active:scale-95 disabled:opacity-50 shrink-0"
           title="Sinkronkan data profil dari MagangHub"
           id="btn-sync-profile"
         >
-          <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} aria-hidden="true" />
-          <span>{isSyncing ? 'Sinkron...' : 'Sync'}</span>
+          <RefreshCw size={13} className={isSyncing ? 'animate-spin text-primary' : 'text-slate-400'} aria-hidden="true" />
+          <span className="hidden sm:inline">{isSyncing ? 'Menyinkronkan...' : 'Sinkron'}</span>
         </button>
       </div>
 
@@ -115,19 +140,25 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
         <p
           role="status"
           className={`text-xs ${
-            syncMessage.startsWith('✓') ? 'text-status-done font-medium' : 'text-red-500'
+            syncMessage.startsWith('✓') ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'
           }`}
         >
           {syncMessage}
         </p>
       )}
 
-      {syncedTime && (
-        <div className="text-[10px] text-text-muted flex justify-between items-center pt-2 border-t border-border/60">
-          <span>Sinkronisasi MagangHub</span>
-          <span>Pukul {syncedTime}</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between border-t border-slate-200/60 pt-3 text-[11px] text-text-muted">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          Status MagangHub: <strong className="text-slate-700 font-medium">{status}</strong>
+        </span>
+        {syncedTime && (
+          <span className="inline-flex items-center gap-1">
+            <Clock size={11} className="text-slate-400" aria-hidden="true" />
+            Sinkron {syncedTime}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

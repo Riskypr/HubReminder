@@ -3,9 +3,9 @@
 
 export default function DashboardLoading() {
   return (
-    <div className="space-y-4 animate-pulse" aria-busy="true" aria-label="Memuat data...">
+    <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 animate-pulse lg:grid-cols-2" aria-busy="true" aria-label="Memuat data...">
       {/* Skeleton Status / Header */}
-      <div className="card space-y-3">
+      <div className="card space-y-3 lg:col-span-2">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-border/60" />
           <div className="space-y-2 flex-1">
@@ -20,7 +20,7 @@ export default function DashboardLoading() {
       </div>
 
       {/* Skeleton Action Button */}
-      <div className="h-12 w-full bg-primary/20 rounded-xl" />
+      <div className="h-12 w-full rounded-xl bg-primary/20" />
 
       {/* Skeleton Secondary Card */}
       <div className="card space-y-2.5">

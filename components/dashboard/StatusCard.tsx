@@ -1,16 +1,15 @@
 // components/dashboard/StatusCard.tsx
-// Badge status utama di atas dashboard — warna + ikon + label teks + tombol cek sekarang
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { CircleHelp, CircleCheck, RefreshCw, TriangleAlert, Circle } from 'lucide-react';
+import { BellRing, CheckCircle2, Clock3, HelpCircle, AlertCircle, RefreshCw, TriangleAlert, Sparkles, Check, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 
 interface StatusCardProps {
   status: AttendanceStatus;
-  lastCheckedAt: string | null; // ISO string
+  lastCheckedAt: string | null;
   sentToday: number;
   maxPerDay: number;
   allowManualCheck?: boolean;
@@ -18,35 +17,56 @@ interface StatusCardProps {
 
 const STATUS_CONFIG: Record<
   AttendanceStatus,
-  { icon: typeof Circle; label: string; badgeClass: string; cardBg: string; desc: string }
+  {
+    icon: typeof CheckCircle2;
+    label: string;
+    badgeClass: string;
+    cardBorder: string;
+    bgGradient: string;
+    iconBg: string;
+    iconColor: string;
+    desc: string;
+  }
 > = {
   belum_lapor: {
-    icon: Circle,
+    icon: AlertCircle,
     label: 'Belum Lapor',
     badgeClass: 'badge-pending',
-    cardBg: 'border-l-4 border-l-status-pending',
-    desc: 'Laporan hari ini belum diisi. Segera isi di MagangHub.',
+    cardBorder: 'border-blue-200/80 hover:border-blue-300',
+    bgGradient: 'bg-gradient-to-br from-blue-50/70 via-white to-white',
+    iconBg: 'bg-blue-100 text-blue-600 border border-blue-200',
+    iconColor: 'text-blue-600',
+    desc: 'Laporan harian MagangHub belum tercatat hari ini. Segera buat laporan kegiatanmu.',
   },
   selesai: {
-    icon: CircleCheck,
+    icon: CheckCircle2,
     label: 'Sudah Lapor',
     badgeClass: 'badge-done',
-    cardBg: 'border-l-4 border-l-status-done',
-    desc: 'Laporan hari ini sudah diisi. Terima kasih!',
+    cardBorder: 'border-emerald-200/80 hover:border-emerald-300',
+    bgGradient: 'bg-gradient-to-br from-emerald-50/70 via-white to-white',
+    iconBg: 'bg-emerald-100 text-emerald-600 border border-emerald-200',
+    iconColor: 'text-emerald-600',
+    desc: 'Luar biasa! Laporan harian hari ini sudah selesai diisi dan diverifikasi.',
   },
   unknown: {
-    icon: CircleHelp,
-    label: 'Tidak Diketahui',
+    icon: HelpCircle,
+    label: 'Status Belum Dicek',
     badgeClass: 'badge-unknown',
-    cardBg: 'border-l-4 border-l-status-unknown',
-    desc: 'Belum ada status laporan hari ini. Klik "Cek Status" untuk memeriksa ke MagangHub.',
+    cardBorder: 'border-slate-200 hover:border-slate-300',
+    bgGradient: 'bg-gradient-to-br from-slate-50/70 via-white to-white',
+    iconBg: 'bg-slate-100 text-slate-600 border border-slate-200',
+    iconColor: 'text-slate-600',
+    desc: 'Belum ada data status laporan hari ini. Klik "Cek Status" untuk memeriksa ke MagangHub.',
   },
   session_expired: {
     icon: TriangleAlert,
     label: 'Sesi Kedaluwarsa',
     badgeClass: 'badge-unknown',
-    cardBg: 'border-l-4 border-l-warning',
-    desc: 'Sesi MagangHub kamu perlu dihubungkan ulang di menu Setting.',
+    cardBorder: 'border-amber-200 hover:border-amber-300',
+    bgGradient: 'bg-gradient-to-br from-amber-50/70 via-white to-white',
+    iconBg: 'bg-amber-100 text-amber-600 border border-amber-200',
+    iconColor: 'text-amber-600',
+    desc: 'Sesi akun MagangHub telah berakhir. Perbarui cookie sesi di menu Pengaturan.',
   },
 };
 
@@ -63,7 +83,6 @@ export default function StatusCard({
   const [checking, setChecking] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Sinkronkan state lokal saat prop dari server berubah
   useEffect(() => {
     setCurrentStatus(status);
   }, [status]);
@@ -73,6 +92,7 @@ export default function StatusCard({
   }, [lastCheckedAt]);
 
   const config = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.unknown;
+  const IconComponent = config.icon;
 
   const lastCheckedLabel = currentLastChecked
     ? formatRelativeTime(currentLastChecked)
@@ -91,16 +111,17 @@ export default function StatusCard({
         }
         const statusMsg =
           data.status === 'selesai'
-            ? '✓ Status: Sudah Lapor'
+            ? 'Status: Sudah Lapor'
             : data.status === 'belum_lapor'
-            ? '✓ Status: Belum Lapor'
-            : '✓ Status diperbarui';
-        setFeedback(statusMsg);
-        toast.success(statusMsg.replace(/^✓\s*/, ''));
+            ? 'Status: Belum Lapor'
+            : 'Status diperbarui';
+        setFeedback(`✓ ${statusMsg}`);
+        toast.success(statusMsg);
         router.refresh();
       } else {
-        setFeedback(data?.error || 'Gagal mengecek status');
-        toast.error(data?.error || 'Gagal mengecek status');
+        const errorMsg = data?.error || 'Gagal mengecek status';
+        setFeedback(errorMsg);
+        toast.error(errorMsg);
       }
     } catch {
       setFeedback('Koneksi terganggu');
@@ -113,22 +134,47 @@ export default function StatusCard({
 
   return (
     <div
-      className={`card ${config.cardBg} space-y-3`}
+      className={`card relative overflow-hidden ${config.cardBorder} ${config.bgGradient} space-y-5`}
       role="status"
       aria-live="polite"
       aria-label={`Status laporan: ${config.label}`}
     >
-      {/* Badge status besar */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-primary shadow-sm">
-            <config.icon size={28} strokeWidth={1.8} />
-          </span>
+      {/* Decorative background circle */}
+      <div className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full bg-white/40 blur-xl" />
+
+      {/* Header & Status Display */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-4">
+          <div className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm ${config.iconBg}`}>
+            {currentStatus === 'belum_lapor' && (
+              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600" />
+              </span>
+            )}
+            <IconComponent size={30} strokeWidth={2} aria-hidden="true" />
+          </div>
+
           <div>
-            <span className={config.badgeClass} role="img" aria-label={config.label}>
-              {config.label}
-            </span>
-            <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={config.badgeClass} role="img" aria-label={config.label}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {config.label}
+              </span>
+              {currentStatus === 'selesai' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                  <Sparkles size={13} aria-hidden="true" /> Aman Hari Ini
+                </span>
+              )}
+            </div>
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-text-primary">
+              {currentStatus === 'selesai'
+                ? 'Laporan Harian Selesai'
+                : currentStatus === 'belum_lapor'
+                ? 'Belum Mengisi Laporan'
+                : config.label}
+            </h2>
+            <p className="mt-1 text-xs text-text-secondary leading-relaxed max-w-xl">
               {config.desc}
             </p>
           </div>
@@ -139,43 +185,50 @@ export default function StatusCard({
             onClick={handleCheckNow}
             disabled={checking}
             id="btn-check-attendance-now"
-            className="text-xs text-primary hover:text-primary-dark transition-colors px-2.5 py-1.5 rounded-md hover:bg-blue-50 disabled:opacity-50 shrink-0 font-medium flex items-center gap-1 border border-primary/20"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/90 bg-white/90 px-4 py-2.5 text-xs font-semibold text-text-primary shadow-xs transition-all hover:bg-white hover:border-primary/40 hover:text-primary hover:shadow active:scale-95 disabled:opacity-60 shrink-0 self-start"
             title="Cek status terkini langsung ke MagangHub"
           >
-            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} aria-hidden="true" />
-            <span>{checking ? 'Mengecek...' : 'Cek Status'}</span>
+            <RefreshCw size={14} className={checking ? 'animate-spin text-primary' : 'text-slate-400'} aria-hidden="true" />
+            <span>{checking ? 'Mengecek...' : 'Cek Status Sekarang'}</span>
           </button>
         )}
       </div>
 
       {feedback && (
-        <p
+        <div
           role="status"
-          className={`text-xs ${
-            feedback.startsWith('✓') ? 'text-status-done font-medium' : 'text-red-500'
+          className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
+            feedback.startsWith('✓') ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
           }`}
         >
-          {feedback}
-        </p>
+          {feedback.startsWith('✓') ? <Check size={14} aria-hidden="true" /> : <AlertCircle size={14} aria-hidden="true" />}
+          <span>{feedback}</span>
+        </div>
       )}
 
-      {/* Info terakhir dicek */}
-      <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border">
-        <span>
-          <span className="font-medium">Terakhir dicek:</span> {lastCheckedLabel}
-        </span>
+      {/* Meta Footer Grid */}
+      <div className="grid grid-cols-1 gap-2 border-t border-slate-200/70 pt-3.5 text-xs text-text-muted sm:grid-cols-2 sm:items-center">
+        <div className="inline-flex items-center gap-2">
+          <Clock3 size={15} className="text-slate-400" aria-hidden="true" />
+          <span>
+            <strong className="font-semibold text-slate-700">Terakhir dicek:</strong> {lastCheckedLabel}
+          </span>
+        </div>
+
         {currentStatus === 'belum_lapor' && (
-          <div className="text-right text-status-pending">
-            <span className="font-medium">
+          <div className="inline-flex items-center gap-2 sm:justify-end text-blue-700 font-medium">
+            <BellRing size={15} className="text-blue-500" aria-hidden="true" />
+            <span>
               {sentToday <= maxPerDay
                 ? `${sentToday}/${maxPerDay} reminder terkirim hari ini`
-                : `${sentToday} reminder sudah terkirim hari ini`}
+                : `${sentToday} reminder sudah terkirim`}
             </span>
-            {sentToday > maxPerDay && (
-              <p className="mt-0.5 text-[11px] text-text-muted">
-                Batas sekarang {maxPerDay}; tidak ada reminder tambahan hari ini.
-              </p>
-            )}
+          </div>
+        )}
+        {currentStatus === 'selesai' && (
+          <div className="inline-flex items-center gap-1.5 sm:justify-end text-emerald-700 font-medium">
+            <CheckCircle2 size={15} className="text-emerald-500" aria-hidden="true" />
+            <span>Tidak ada reminder diperlukan</span>
           </div>
         )}
       </div>
@@ -183,10 +236,9 @@ export default function StatusCard({
   );
 }
 
-/** Format ISO string ke relative time sederhana (tanpa import date-fns agar client bundle kecil) */
 function formatRelativeTime(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return 'baru saja';
+  if (diff < 60) return 'Baru saja';
   if (diff < 3600) return `${Math.floor(diff / 60)} menit lalu`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
   return `${Math.floor(diff / 86400)} hari lalu`;

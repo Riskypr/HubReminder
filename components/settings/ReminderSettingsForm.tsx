@@ -5,7 +5,21 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useState } from 'react';
-import { BellRing, Plus, Send } from 'lucide-react';
+import {
+  BellRing,
+  Check,
+  Clock3,
+  Hash,
+  Pencil,
+  PauseCircle,
+  Send,
+  Timer,
+  X,
+  Sparkles,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
   REMINDER_INTERVAL_OPTIONS,
@@ -24,17 +38,18 @@ function normalizeInterval(seconds: number) {
     : 900;
 }
 
-const schema = z
-  .object({
-    enabled: z.boolean(),
-    max_reminders_per_day: z.number().int().min(1).max(20),
-    interval_seconds: z.number().int().refine(
-      (value) => REMINDER_INTERVAL_SECONDS.includes(value as (typeof REMINDER_INTERVAL_SECONDS)[number]),
-      'Pilih interval yang tersedia',
-    ),
-    reminder_times: z.array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Gunakan format jam dan menit (HH:MM)')).min(1, 'Tambahkan minimal satu waktu reminder'),
-    snooze_today: z.boolean(),
-  });
+const schema = z.object({
+  enabled: z.boolean(),
+  max_reminders_per_day: z.number().int().min(1).max(20),
+  interval_seconds: z.number().int().refine(
+    (value) => REMINDER_INTERVAL_SECONDS.includes(value as (typeof REMINDER_INTERVAL_SECONDS)[number]),
+    'Pilih interval yang tersedia',
+  ),
+  reminder_times: z
+    .array(z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, 'Gunakan format jam dan menit (HH:MM)'))
+    .min(1, 'Pilih minimal satu waktu reminder'),
+  snooze_today: z.boolean(),
+});
 
 type FormValues = z.infer<typeof schema>;
 
@@ -47,7 +62,9 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [testingPush, setTestingPush] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [newReminderTime, setNewReminderTime] = useState('07:00');
+  const [editingReminderTime, setEditingReminderTime] = useState<string | null>(null);
+  const [editedReminderTime, setEditedReminderTime] = useState('');
+  const [reminderTimeError, setReminderTimeError] = useState<string | null>(null);
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const isSnoozedToday = initialSettings.snooze_until === todayStr;
@@ -61,23 +78,25 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       if (res.ok) {
         setTestResult({
           success: true,
-          message: `✓ Berhasil! Notifikasi telah dikirim ke ${data.sentToDevices || 1} perangkat terdaftar. Cek bilah notifikasi Anda.`,
+          message: `Berhasil! Notifikasi telah dikirim ke ${data.sentToDevices || 1} perangkat. Silakan cek status bar atau notifikasi perangkat Anda.`,
         });
-        toast.success('Notifikasi uji coba berhasil dikirim.');
+        toast.success('Notifikasi uji coba berhasil dikirim!');
       } else {
+        const errorMsg = data.error || 'Gagal mengirim notifikasi tes.';
         setTestResult({
           success: false,
-          message: data.error || 'Gagal mengirim notifikasi tes.',
+          message: errorMsg,
         });
-        toast.error(data.error || 'Gagal mengirim notifikasi tes.');
+        toast.error(errorMsg);
       }
     } catch (err: unknown) {
       const error = err as Error;
+      const errorMsg = error.message || 'Terjadi kesalahan saat memanggil API.';
       setTestResult({
         success: false,
-        message: error.message || 'Terjadi kesalahan saat memanggil API.',
+        message: errorMsg,
       });
-      toast.error(error.message || 'Terjadi kesalahan saat memanggil API.');
+      toast.error(errorMsg);
     } finally {
       setTestingPush(false);
     }
@@ -103,13 +122,35 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
   const enabled = watch('enabled');
   const reminderTimes = watch('reminder_times');
 
-  function addReminderTime() {
-    if (!newReminderTime || reminderTimes.includes(newReminderTime)) return;
-    setValue('reminder_times', [...reminderTimes, newReminderTime].sort(), { shouldValidate: true, shouldDirty: true });
+  function startEditingReminderTime(time: string) {
+    setEditingReminderTime(time);
+    setEditedReminderTime(time);
+    setReminderTimeError(null);
   }
 
-  function removeReminderTime(time: string) {
-    setValue('reminder_times', reminderTimes.filter((item) => item !== time), { shouldValidate: true, shouldDirty: true });
+  function cancelEditingReminderTime() {
+    setEditingReminderTime(null);
+    setEditedReminderTime('');
+    setReminderTimeError(null);
+  }
+
+  function saveEditedReminderTime(originalTime: string) {
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(editedReminderTime)) {
+      setReminderTimeError('Pilih waktu dengan format HH:MM.');
+      return;
+    }
+    const nextTime = normalizeReminderTime(editedReminderTime);
+    if (reminderTimes.some((time) => time !== originalTime && time === nextTime)) {
+      setReminderTimeError('Waktu tersebut sudah ada di daftar.');
+      return;
+    }
+
+    setValue(
+      'reminder_times',
+      reminderTimes.map((time) => (time === originalTime ? nextTime : time)).sort(),
+      { shouldValidate: true, shouldDirty: true },
+    );
+    cancelEditingReminderTime();
   }
 
   async function onSubmit(values: FormValues) {
@@ -126,22 +167,35 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setSaveError(body.error ?? 'Gagal menyimpan pengaturan');
-      toast.error(body.error ?? 'Gagal menyimpan pengaturan');
+      const err = body.error ?? 'Gagal menyimpan pengaturan';
+      setSaveError(err);
+      toast.error(err);
     } else {
       setSaved(true);
-      toast.success('Pengaturan reminder berhasil disimpan.');
+      toast.success('Pengaturan reminder berhasil disimpan!');
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" aria-label="Form pengaturan reminder">
-      {/* Toggle aktifkan reminder */}
-      <div className="card flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-text-primary">Aktifkan Reminder</p>
-          <p className="text-xs text-text-muted mt-0.5">Kirim notifikasi saat laporan belum diisi</p>
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="grid grid-cols-1 gap-6 lg:grid-cols-12"
+      aria-label="Form pengaturan reminder"
+    >
+      {/* Toggle Utama: Aktifkan Reminder (Full Width on Desktop Grid) */}
+      <div className="card flex items-center justify-between p-5 border-slate-200/90 bg-white lg:col-span-12">
+        <div className="flex items-center gap-4">
+          <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${enabled ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
+            <BellRing size={22} aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-text-primary tracking-tight">Aktifkan Layanan Pengingat</h2>
+            <p className="text-xs text-text-secondary mt-0.5">
+              HubReminder akan memantau absensi dan mengirimkan push notification pada jadwal yang ditentukan.
+            </p>
+          </div>
         </div>
+
         <label className="relative inline-flex items-center cursor-pointer" htmlFor="toggle-enabled">
           <input
             id="toggle-enabled"
@@ -149,167 +203,251 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
             className="sr-only peer"
             {...register('enabled')}
           />
-          <div className="w-11 h-6 bg-border rounded-full peer
-                          peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-primary/40
-                          after:content-[''] after:absolute after:top-0.5 after:left-[2px]
-                          after:bg-white after:rounded-full after:h-5 after:w-5
-                          after:transition-all peer-checked:after:translate-x-full" />
+          <div className="w-12 h-6.5 bg-slate-200 rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/20 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:after:translate-x-5.5" />
         </label>
       </div>
 
-      {/* Pengaturan detail — tampil saat enabled */}
       {enabled && (
         <>
-          {/* Maks reminder per hari */}
-          <div className="card space-y-3">
-            <label htmlFor="max-reminders" className="label">
-              Maks. reminder per hari
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                id="max-reminders"
-                type="range"
-                min={1}
-                max={10}
-                step={1}
-                className="flex-1 accent-primary h-2 cursor-pointer"
-                {...register('max_reminders_per_day', { valueAsNumber: true })}
-              />
-              <span className="text-sm font-semibold text-primary w-6 text-center">
-                {watch('max_reminders_per_day')}x
-              </span>
+          {/* Kolom Kiri: Maks Reminder per hari & Interval (Desktop Grid col-span-6) */}
+          <div className="space-y-6 lg:col-span-6">
+            {/* Maks reminder per hari */}
+            <div className="card space-y-4 border-slate-200/90 bg-white p-5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="max-reminders" className="label flex items-center gap-2 mb-0">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-primary">
+                    <Hash size={15} />
+                  </span>
+                  <span>Maksimum Pengingat per Hari</span>
+                </label>
+                <span className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                  {watch('max_reminders_per_day')}x / hari
+                </span>
+              </div>
+              <p className="text-xs text-text-muted">
+                Batas pengingat maksimal yang boleh dikirimkan dalam 1 hari agar tidak berlebihan.
+              </p>
+              <div className="flex items-center gap-4 pt-1">
+                <input
+                  id="max-reminders"
+                  type="range"
+                  min={1}
+                  max={10}
+                  step={1}
+                  className="flex-1 accent-primary h-2 cursor-pointer bg-slate-200 rounded-lg"
+                  {...register('max_reminders_per_day', { valueAsNumber: true })}
+                />
+              </div>
+              {errors.max_reminders_per_day && (
+                <p className="text-xs text-red-600 font-medium">{errors.max_reminders_per_day.message}</p>
+              )}
             </div>
-            {errors.max_reminders_per_day && (
-              <p className="text-xs text-red-600">{errors.max_reminders_per_day.message}</p>
-            )}
+
+            {/* Interval Jeda */}
+            <div className="card space-y-3 border-slate-200/90 bg-white p-5">
+              <label htmlFor="interval" className="label flex items-center gap-2 mb-0">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-primary">
+                  <Timer size={15} />
+                </span>
+                <span>Interval Jeda Antar Pengingat</span>
+              </label>
+              <p className="text-xs text-text-muted leading-relaxed">
+                Jarak waktu minimum sebelum pengingat berikutnya diizinkan untuk dikirimkan kembali.
+              </p>
+              <select
+                id="interval"
+                className="input font-medium"
+                {...register('interval_seconds', { valueAsNumber: true })}
+              >
+                {REMINDER_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Interval */}
-          <div className="card space-y-2">
-            <label htmlFor="interval" className="label">
-              Interval antar reminder
-            </label>
-            <p className="text-xs text-text-muted">
-              Cron memeriksa setiap menit. Interval adalah jarak minimum antar pengiriman pada waktu yang dipilih.
-            </p>
-            <select
-              id="interval"
-              className="input"
-              {...register('interval_seconds', { valueAsNumber: true })}
-            >
-              {REMINDER_INTERVAL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+          {/* Kolom Kanan: Snooze Today & Push Test (Desktop Grid col-span-6) */}
+          <div className="space-y-6 lg:col-span-6">
+            {/* Snooze hari ini */}
+            <div className="card flex items-center justify-between p-5 border-slate-200/90 bg-white">
+              <div className="flex items-center gap-3.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                  <PauseCircle size={20} aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-text-primary">Tunda Hari Ini (Snooze)</h3>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    Hentikan pengingat khusus untuk hari ini (misal sedang cuti atau izin).
+                  </p>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer" htmlFor="snooze-today">
+                <input
+                  id="snooze-today"
+                  type="checkbox"
+                  className="sr-only peer"
+                  {...register('snooze_today')}
+                />
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-amber-500 peer-focus:ring-2 peer-focus:ring-amber-400 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:after:translate-x-full" />
+              </label>
+            </div>
+
+            {/* Bagian Uji Coba Reminder Push Notification */}
+            <div className="card space-y-3 border-slate-200/90 bg-white p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-xs">
+                  <Send size={18} aria-hidden="true" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-text-primary">Uji Coba Push Notification</h3>
+                  <p className="text-xs text-text-secondary">Tes pengiriman notifikasi instan ke HP / laptop ini</p>
+                </div>
+              </div>
+
+              {testResult && (
+                <div
+                  role="status"
+                  className={`flex items-start gap-2 text-xs p-3 rounded-2xl border ${
+                    testResult.success
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-red-50 text-red-800 border-red-200'
+                  }`}
+                >
+                  {testResult.success ? (
+                    <CheckCircle2 size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+                  ) : (
+                    <AlertCircle size={16} className="text-red-600 mt-0.5 shrink-0" />
+                  )}
+                  <span>{testResult.message}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                id="btn-test-push-notification"
+                onClick={handleTestPush}
+                disabled={testingPush}
+                className="btn-outline w-full text-xs font-semibold flex items-center justify-center gap-2"
+              >
+                <Send size={14} className={testingPush ? 'animate-spin' : ''} aria-hidden="true" />
+                <span>{testingPush ? 'Mengirimkan notifikasi…' : 'Kirim Tes Notifikasi Sekarang'}</span>
+              </button>
+            </div>
           </div>
 
-          {/* Waktu reminder */}
-          <div className="card space-y-3">
-            <div>
-              <p className="label">Waktu reminder</p>
-              <p className="text-xs text-text-muted mt-0.5">Cron memeriksa setiap menit, jadi waktu reminder menggunakan format HH:MM. Tambahkan satu atau beberapa waktu.</p>
+          {/* Waktu Reminder Terjadwal (Full Width Grid lg:col-span-12) */}
+          <div className="card space-y-4 border-slate-200/90 bg-white p-5 lg:col-span-12">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                  <Clock3 size={17} className="text-primary" />
+                  <span>Jadwal Waktu Pengingat (HH:MM)</span>
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Pengingat akan memeriksa absensi pada jam-jam berikut. Anda dapat mengubah waktu sesuai kebutuhan.
+                </p>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <input
-                id="reminder-time"
-                type="time"
-                step="60"
-                value={newReminderTime}
-                onChange={(event) => setNewReminderTime(event.target.value)}
-                className="input flex-1"
-                aria-label="Waktu reminder baru"
-              />
-              <button type="button" onClick={addReminderTime} className="btn-outline shrink-0 inline-flex items-center gap-1"><Plus size={15} aria-hidden="true" />Tambah</button>
-            </div>
-            <ul className="space-y-2" aria-label="Daftar waktu reminder">
+
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" aria-label="Daftar waktu reminder">
               {reminderTimes.map((time) => (
-                <li key={time} className="flex items-center justify-between rounded-xl bg-bg px-3 py-2">
-                  <span className="text-sm font-medium text-text-primary">{time}</span>
-                  <button type="button" onClick={() => removeReminderTime(time)} className="text-sm font-medium text-red-600 min-h-11 px-2" aria-label={`Hapus waktu ${time}`}>Hapus</button>
+                <li key={time} className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-3.5 shadow-2xs">
+                  {editingReminderTime === time ? (
+                    <div className="space-y-3">
+                      <label className="label text-xs" htmlFor={`edit-reminder-${time}`}>
+                        Ubah waktu {time}
+                      </label>
+                      <input
+                        id={`edit-reminder-${time}`}
+                        type="time"
+                        step="60"
+                        value={editedReminderTime}
+                        onChange={(event) => {
+                          setEditedReminderTime(event.target.value);
+                          setReminderTimeError(null);
+                        }}
+                        className="input text-xs py-2"
+                        autoFocus
+                      />
+                      {reminderTimeError && (
+                        <p className="text-xs text-red-600 font-medium" role="alert">
+                          {reminderTimeError}
+                        </p>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelEditingReminderTime}
+                          className="btn-outline min-h-[36px] px-3 py-1.5 text-xs inline-flex items-center gap-1"
+                        >
+                          <X size={13} aria-hidden="true" />
+                          <span>Batal</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => saveEditedReminderTime(time)}
+                          className="btn-primary min-h-[36px] px-3 py-1.5 text-xs inline-flex items-center gap-1"
+                        >
+                          <Check size={13} aria-hidden="true" />
+                          <span>Simpan</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-2 text-base font-bold tabular-nums text-text-primary">
+                        <Clock3 size={16} className="text-primary" aria-hidden="true" />
+                        {time}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => startEditingReminderTime(time)}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition hover:bg-slate-100 hover:text-text-primary"
+                        aria-label={`Ubah waktu ${time}`}
+                      >
+                        <Pencil size={12} aria-hidden="true" />
+                        <span>Ubah</span>
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
-            {errors.reminder_times && <p className="text-xs text-red-600">{errors.reminder_times.message}</p>}
-          </div>
-
-          {/* Snooze hari ini */}
-          <div className="card flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Tunda hari ini</p>
-              <p className="text-xs text-text-muted mt-0.5">Nonaktifkan reminder untuk hari ini saja</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer" htmlFor="snooze-today">
-              <input
-                id="snooze-today"
-                type="checkbox"
-                className="sr-only peer"
-                {...register('snooze_today')}
-              />
-              <div className="w-11 h-6 bg-border rounded-full peer
-                              peer-checked:bg-warning peer-focus:ring-2 peer-focus:ring-warning/40
-                              after:content-[''] after:absolute after:top-0.5 after:left-[2px]
-                              after:bg-white after:rounded-full after:h-5 after:w-5
-                              after:transition-all peer-checked:after:translate-x-full" />
-            </label>
+            {errors.reminder_times && (
+              <p className="text-xs text-red-600 font-medium">{errors.reminder_times.message}</p>
+            )}
           </div>
         </>
       )}
 
-      {/* Feedback */}
-      {saved && (
-        <p role="status" className="text-sm text-status-done font-medium text-center">
-          ✓ Pengaturan berhasil disimpan
-        </p>
-      )}
-      {saveError && (
-        <p role="alert" className="text-sm text-red-600 text-center">
-          {saveError}
-        </p>
-      )}
-
-      <button
-        type="submit"
-        id="btn-save-reminder-settings"
-        disabled={isSubmitting}
-        className="btn-primary w-full"
-      >
-        {isSubmitting ? 'Menyimpan...' : 'Simpan Pengaturan'}
-      </button>
-
-      {/* Bagian Uji Coba Reminder */}
-      <div className="card space-y-3 pt-4 border-t border-border mt-6">
+      {/* Action Footer Button (Full Width lg:col-span-12) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/80 pt-4 lg:col-span-12">
         <div>
-          <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
-            <BellRing size={16} aria-hidden="true" /> Uji Coba Pengingat (Push Notification)
-          </h3>
-          <p className="text-xs text-text-secondary mt-1">
-            Kirimkan satu notifikasi uji coba langsung ke perangkat ini untuk memastikan suara dan banner reminder bekerja.
-          </p>
+          {saved && (
+            <p role="status" className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+              <CheckCircle2 size={15} />
+              Pengaturan reminder berhasil disimpan
+            </p>
+          )}
+          {saveError && (
+            <p role="alert" className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600">
+              <AlertCircle size={15} />
+              {saveError}
+            </p>
+          )}
         </div>
 
-        {testResult && (
-          <div
-            role="status"
-            className={`text-xs p-3 rounded-xl border ${
-              testResult.success
-                ? 'bg-green-50 text-green-700 border-green-200'
-                : 'bg-red-50 text-red-700 border-red-200'
-            }`}
-          >
-            {testResult.message}
-          </div>
-        )}
-
         <button
-          type="button"
-          id="btn-test-push-notification"
-          onClick={handleTestPush}
-          disabled={testingPush}
-          className="btn-outline w-full text-xs font-semibold flex items-center justify-center gap-2"
+          type="submit"
+          id="btn-save-reminder-settings"
+          disabled={isSubmitting || editingReminderTime !== null}
+          className="btn-primary sm:min-w-48"
         >
-          {testingPush ? 'Mengirim notifikasi...' : <><Send size={14} aria-hidden="true" /> Kirim Tes Notifikasi ke HP/Browser</>}
+          <Save size={16} aria-hidden="true" />
+          <span>{isSubmitting ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
         </button>
       </div>
     </form>

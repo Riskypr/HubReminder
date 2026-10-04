@@ -144,6 +144,7 @@ Deno.serve(async (req) => {
                     ? `${u.internship_start_date} – ${u.internship_end_date}`
                     : undefined,
                 participant_status: u.participant_status?.reason || undefined,
+                position: u.position || u.internship_position || u.job_title || u.role || u.division || u.user_type || undefined,
                 maganghub_synced_at: new Date().toISOString(),
               })
               .eq('id', session.user_id);

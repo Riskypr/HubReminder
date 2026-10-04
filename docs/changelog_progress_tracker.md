@@ -6,6 +6,41 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [Unreleased / Current Work]
 
+## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
+- **Added**:
+  - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).
+  - Penambahan ikon Lucide yang komprehensif di seluruh antarmuka (Header, Desktop Sidebar, Mobile Bottom Nav, Status Card, Profile Card, Timeline Riwayat, Form Pengaturan Reminder, Form Akun MagangHub, Banner, dan Halaman Login).
+  - Komponen `components/ui/ConfirmDialog.tsx` yang ditingkatkan dengan animasi modal Next.js yang modern, varian dialog (danger, warning, info), ikon kustom, focus trap, dukungan tombol Escape, dan state loading tombol yang elegan.
+  - Fitur Logout akun HubReminder dengan dialog konfirmasi modal Next.js (bukan bawaan browser) pada Header dan Sidebar.
+  - Banner sapaan dinamis di Dashboard ("Selamat Pagi/Siang/Sore/Malam") dengan format tanggal bahasa Indonesia dan pill status aktif.
+- **Changed**:
+  - Memperbaiki tempat munculnya toast notifikasi: mengimpor CSS resmi `react-toastify/dist/ReactToastify.css`, mengatur posisi di bagian atas (`position="top-right"` pada desktop dan adaptif pada mobile dengan `top: 1rem`), serta styling modern dengan z-index tinggi (`z-[99999]`), border warna sesuai status, dan efek glassmorphism.
+  - Mengganti seluruh pop-up konfirmasi bawaan browser (`window.confirm`/`window.alert`) dengan komponen modal Next.js `ConfirmDialog` (untuk memutuskan akun MagangHub dan keluar akun HubReminder).
+  - Redesign total estetika UI pada `app/globals.css`: gradient latar belakang halus, radius sudut modern (`rounded-2xl` & `rounded-3xl`), drop shadow lembut, kartu dengan micro-interaction saat hover, serta navigasi desktop sidebar terpadu.
+- **Deprecated/Removed**:
+  - Dihilangkan seluruh potensi penggunaan pop-up dialog bawaan browser.
+  - Penayangan foto profil eksternal pada kartu profil ditiadakan dan digantikan oleh ikon lencana avatar kustom.
+- **Notes for Next Agent**:
+  - Posisi toast diatur via `ToastProvider.tsx` dan class override `.hub-toast-container` di `app/globals.css`. Dialog modal terpusat di `components/ui/ConfirmDialog.tsx` dan dapat dipanggil dengan props `open`, `title`, `description`, `confirmLabel`, `variant`, dan event `onConfirm`/`onCancel`. Foto profil sengaja tidak ditampilkan di `ProfileCard.tsx` sesuai preferensi UI.
+
+## [2026-10-04] - Redesign UI, Navigasi Desktop, dan Dialog Konfirmasi
+- **Added**: Sistem tampilan responsif dengan ikon Lucide pada halaman login, dashboard, riwayat, pengaturan, serta navigasi sidebar desktop; konten utama memakai grid pada desktop. Komponen dialog konfirmasi aplikasi menggantikan `window.confirm` saat memutuskan akun.
+- **Changed**: Toast notifikasi berpindah ke bagian atas layar; header dan navigasi berubah menjadi sidebar di desktop sementara navigasi bawah tetap dipakai di mobile. Dashboard, kartu profil/status, riwayat, login, dan pengaturan memperoleh tata letak serta hierarki visual yang diperbarui.
+- **Deprecated/Removed**: Dialog konfirmasi bawaan browser untuk memutuskan akun.
+- **Notes for Next Agent**: Dialog memakai komponen `components/ui/ConfirmDialog.tsx`; pertahankan focus handling dan Escape key jika dialog diubah. Tidak ada perubahan API atau schema database.
+
+## [2026-10-04] - Ubah Waktu Reminder dan Grid Desktop
+- **Changed**: Kontrol tambah/hapus waktu reminder diganti editor per waktu dengan aksi Ubah, Simpan, dan Batal; validasi mencegah format salah dan waktu duplikat.
+- **Added**: Ikon untuk bagian pengaturan dan item waktu, serta layout grid dua kolom pada desktop dan grid responsif untuk daftar waktu.
+- **Deprecated/Removed**: Aksi Tambah dan Hapus waktu reminder dihapus dari UI.
+- **Notes for Next Agent**: Jumlah waktu yang sudah tersimpan tidak berubah; pengguna dapat mengubah waktu yang ada lalu menekan Simpan Pengaturan. Tidak ada perubahan schema/API.
+
+## [2026-10-04] - Login MagangHub Menggunakan Cookie Sesi
+- **Added**: Opsi login dengan cookie access MagangHub pada form Hubungkan Akun; endpoint memvalidasi cookie lewat profil `/users/me` lalu menyimpan access/refresh token terenkripsi.
+- **Changed**: Parser menerima pasangan cookie bernama atau nilai JWT saja, hanya memproses token MagangHub yang dikenal (`monev-access-token`, `monev_access_token`, `access_token` beserta refresh token), serta mengabaikan cookie SIAPKerja, CSRF, dan cookie lain. Input cookie dibersihkan setelah login berhasil dan tidak dicatat ke log.
+- **Deprecated/Removed**: Tidak ada; login dengan email dan kata sandi tetap tersedia.
+- **Notes for Next Agent**: Pengguna perlu menyalin cookie access dari `monev.maganghub.kemnaker.go.id`, bukan `laravel_session`, `XSRF-TOKEN`, atau cookie `account.kemnaker.go.id`. API MagangHub dari Vercel tetap harus menerima sesi tersebut; jika API upstream juga memblokir request, cookie login tidak akan mengatasi blokir tersebut.
+
 ## [2026-10-02] - Hardening Login SIAPKerja terhadap Proteksi Upstream
 - **Added**: Header request konsisten untuk halaman login dan XHR SIAPKerja, serta pesan diagnostik khusus saat halaman atau submit login ditolak HTTP 403.
 - **Changed**: Parser `Set-Cookie` fallback kini memisahkan beberapa cookie dengan aman, sehingga cookie sesi Laravel dan cookie proteksi upstream sama-sama diteruskan ke request login.
@@ -89,13 +124,3 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: `.env.example` kini hanya berisi placeholder dan mencantumkan konfigurasi Foonte + cron.
 - **Deprecated/Removed**: Tidak ada; jalur Web Push dan tabel pendukungnya masih aktif.
 - **Notes for Next Agent**: Konfigurasikan job `POST` cron-job.org dengan header `X-Cron-Secret`. Terapkan migration sebelum endpoint dipanggil. Respons Foonte direkam maksimal 1.000 karakter dan tidak boleh berisi token.
-
-Setiap agen/developer yang melakukan pembaruan wajib memperbarui bagian di bawah ini sesuai tanggal penanganan:
-
-```markdown
-## [YYYY-MM-DD] - <Judul Singkat Perubahan>
-- **Added**: File/fitur baru yang ditambahkan.
-- **Changed**: Perubahan pada logika atau struktur data.
-- **Deprecated/Removed**: Kode, fungsi, atau tabel DB yang dihapus.
-- **Notes for Next Agent**: Catatan khusus atau hal penting yang perlu diperhatikan oleh agen selanjutnya.
-```
