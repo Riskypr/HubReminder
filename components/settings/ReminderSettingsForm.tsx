@@ -12,10 +12,8 @@ import {
   Hash,
   Pencil,
   PauseCircle,
-  Send,
   Timer,
   X,
-  Sparkles,
   Save,
   CheckCircle2,
   AlertCircle,
@@ -60,47 +58,12 @@ interface Props {
 export default function ReminderSettingsForm({ initialSettings }: Props) {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [testingPush, setTestingPush] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [editingReminderTime, setEditingReminderTime] = useState<string | null>(null);
   const [editedReminderTime, setEditedReminderTime] = useState('');
   const [reminderTimeError, setReminderTimeError] = useState<string | null>(null);
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const isSnoozedToday = initialSettings.snooze_until === todayStr;
-
-  async function handleTestPush() {
-    setTestingPush(true);
-    setTestResult(null);
-    try {
-      const res = await fetch('/api/push/test', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setTestResult({
-          success: true,
-          message: `Berhasil! Notifikasi telah dikirim ke ${data.sentToDevices || 1} perangkat. Silakan cek status bar atau notifikasi perangkat Anda.`,
-        });
-        toast.success('Notifikasi uji coba berhasil dikirim!');
-      } else {
-        const errorMsg = data.error || 'Gagal mengirim notifikasi tes.';
-        setTestResult({
-          success: false,
-          message: errorMsg,
-        });
-        toast.error(errorMsg);
-      }
-    } catch (err: unknown) {
-      const error = err as Error;
-      const errorMsg = error.message || 'Terjadi kesalahan saat memanggil API.';
-      setTestResult({
-        success: false,
-        message: errorMsg,
-      });
-      toast.error(errorMsg);
-    } finally {
-      setTestingPush(false);
-    }
-  }
 
   const {
     register,
@@ -268,7 +231,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
             </div>
           </div>
 
-          {/* Kolom Kanan: Snooze Today & Push Test (Desktop Grid col-span-6) */}
+          {/* Kolom Kanan: Snooze Today (Desktop Grid col-span-6) */}
           <div className="space-y-6 lg:col-span-6">
             {/* Snooze hari ini */}
             <div className="card flex items-center justify-between p-5 border-slate-200/90 bg-white">
@@ -293,48 +256,6 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
                 />
                 <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-amber-500 peer-focus:ring-2 peer-focus:ring-amber-400 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:after:translate-x-full" />
               </label>
-            </div>
-
-            {/* Bagian Uji Coba Reminder Push Notification */}
-            <div className="card space-y-3 border-slate-200/90 bg-white p-5">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-xs">
-                  <Send size={18} aria-hidden="true" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-bold text-text-primary">Uji Coba Push Notification</h3>
-                  <p className="text-xs text-text-secondary">Tes pengiriman notifikasi instan ke HP / laptop ini</p>
-                </div>
-              </div>
-
-              {testResult && (
-                <div
-                  role="status"
-                  className={`flex items-start gap-2 text-xs p-3 rounded-2xl border ${
-                    testResult.success
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : 'bg-red-50 text-red-800 border-red-200'
-                  }`}
-                >
-                  {testResult.success ? (
-                    <CheckCircle2 size={16} className="text-emerald-600 mt-0.5 shrink-0" />
-                  ) : (
-                    <AlertCircle size={16} className="text-red-600 mt-0.5 shrink-0" />
-                  )}
-                  <span>{testResult.message}</span>
-                </div>
-              )}
-
-              <button
-                type="button"
-                id="btn-test-push-notification"
-                onClick={handleTestPush}
-                disabled={testingPush}
-                className="btn-outline w-full text-xs font-semibold flex items-center justify-center gap-2"
-              >
-                <Send size={14} className={testingPush ? 'animate-spin' : ''} aria-hidden="true" />
-                <span>{testingPush ? 'Mengirimkan notifikasi…' : 'Kirim Tes Notifikasi Sekarang'}</span>
-              </button>
             </div>
           </div>
 
