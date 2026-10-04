@@ -22,7 +22,6 @@ const STATUS_CONFIG: Record<
     label: string;
     badgeClass: string;
     cardBorder: string;
-    bgGradient: string;
     iconBg: string;
     iconColor: string;
     desc: string;
@@ -33,7 +32,6 @@ const STATUS_CONFIG: Record<
     label: 'Belum Lapor',
     badgeClass: 'badge-pending',
     cardBorder: 'border-blue-200/80 hover:border-blue-300',
-    bgGradient: 'bg-gradient-to-br from-blue-50/70 via-white to-white',
     iconBg: 'bg-blue-100 text-blue-600 border border-blue-200',
     iconColor: 'text-blue-600',
     desc: 'Laporan harian MagangHub belum tercatat hari ini. Segera buat laporan kegiatanmu.',
@@ -43,7 +41,6 @@ const STATUS_CONFIG: Record<
     label: 'Sudah Lapor',
     badgeClass: 'badge-done',
     cardBorder: 'border-emerald-200/80 hover:border-emerald-300',
-    bgGradient: 'bg-gradient-to-br from-emerald-50/70 via-white to-white',
     iconBg: 'bg-emerald-100 text-emerald-600 border border-emerald-200',
     iconColor: 'text-emerald-600',
     desc: 'Luar biasa! Laporan harian hari ini sudah selesai diisi dan diverifikasi.',
@@ -53,7 +50,6 @@ const STATUS_CONFIG: Record<
     label: 'Status Belum Dicek',
     badgeClass: 'badge-unknown',
     cardBorder: 'border-slate-200 hover:border-slate-300',
-    bgGradient: 'bg-gradient-to-br from-slate-50/70 via-white to-white',
     iconBg: 'bg-slate-100 text-slate-600 border border-slate-200',
     iconColor: 'text-slate-600',
     desc: 'Belum ada data status laporan hari ini. Klik "Cek Status" untuk memeriksa ke MagangHub.',
@@ -63,7 +59,6 @@ const STATUS_CONFIG: Record<
     label: 'Sesi Kedaluwarsa',
     badgeClass: 'badge-unknown',
     cardBorder: 'border-amber-200 hover:border-amber-300',
-    bgGradient: 'bg-gradient-to-br from-amber-50/70 via-white to-white',
     iconBg: 'bg-amber-100 text-amber-600 border border-amber-200',
     iconColor: 'text-amber-600',
     desc: 'Sesi akun MagangHub telah berakhir. Perbarui cookie sesi di menu Pengaturan.',
@@ -134,7 +129,7 @@ export default function StatusCard({
 
   return (
     <div
-      className={`card relative overflow-hidden ${config.cardBorder} ${config.bgGradient} space-y-5`}
+      className={`card relative overflow-hidden ${config.cardBorder} space-y-5`}
       role="status"
       aria-live="polite"
       aria-label={`Status laporan: ${config.label}`}

@@ -33,7 +33,7 @@ export default async function AccountSettingsPage() {
 
       <div className="flex flex-col gap-3 rounded-3xl border border-slate-200/80 bg-white/80 p-5 shadow-xs backdrop-blur-md sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-center gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/20">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/20">
             <ShieldCheck size={24} aria-hidden="true" />
           </span>
           <div>

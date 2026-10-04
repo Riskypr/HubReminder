@@ -26,7 +26,7 @@ export default function SettingsTabs() {
         <span
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-105 ${
             isReminder
-              ? 'bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/25'
+              ? 'bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/25'
               : 'bg-slate-100 text-slate-500'
           }`}
         >
@@ -55,7 +55,7 @@ export default function SettingsTabs() {
         <span
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-transform group-hover:scale-105 ${
             isAccount
-              ? 'bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/25'
+              ? 'bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/25'
               : 'bg-slate-100 text-slate-500'
           }`}
         >

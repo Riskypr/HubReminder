@@ -117,7 +117,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       {/* Top Welcome / Hero Banner for Desktop Grid */}
       <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur-md sm:p-7">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-gradient-to-br from-primary/10 to-[#7C3AED]/15 blur-2xl" />
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-2xl" />
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -132,7 +132,7 @@ export default async function DashboardPage() {
               </span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
-              {greeting}, <span className="bg-gradient-to-r from-primary to-[#7C3AED] bg-clip-text text-transparent">{userDisplayName}</span>
+              {greeting}, <span className="bg-[linear-gradient(135deg,#0759d8,#0344b8)] bg-clip-text text-transparent">{userDisplayName}</span>
             </h1>
             <p className="text-xs text-text-secondary sm:text-sm">
               Pantau kepatuhan pengisian laporan harian dan pastikan absensi MagangHub kamu tercatat tepat waktu.
@@ -178,7 +178,7 @@ export default async function DashboardPage() {
             target="_blank"
             rel="noopener noreferrer"
             id="btn-open-maganghub"
-            className="group flex w-full items-center justify-between rounded-3xl border border-primary/20 bg-gradient-to-r from-primary via-blue-600 to-[#7C3AED] p-5 text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 active:scale-[0.99]"
+            className="group flex w-full items-center justify-between rounded-3xl border border-primary/20 bg-[linear-gradient(135deg,#0759d8,#0344b8)] p-5 text-white shadow-lg shadow-primary/20 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 active:scale-[0.99]"
           >
             <div className="flex items-center gap-4">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm transition-transform group-hover:scale-105">
@@ -282,7 +282,7 @@ export default async function DashboardPage() {
           )}
 
           {/* Quick Info Bot Card */}
-          <div className="card space-y-3 border-slate-200/90 bg-gradient-to-br from-slate-50/90 to-white p-5">
+          <div className="card space-y-3 border-slate-200/90 bg-slate-50 p-5">
             <div className="flex items-center gap-2.5">
               <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
                 <CheckCircle2 size={16} aria-hidden="true" />

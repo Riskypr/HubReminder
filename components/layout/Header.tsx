@@ -38,7 +38,7 @@ export default function Header({ title = 'HubReminder' }: HeaderProps) {
     <>
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200/80 bg-white/80 px-4 py-3 shadow-xs backdrop-blur-xl transition-all lg:ml-64 lg:w-[calc(100%-16rem)] lg:px-8 lg:py-3.5">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary via-blue-600 to-[#7C3AED] text-white shadow-md shadow-primary/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/20">
             <Clock3 size={20} strokeWidth={2.2} aria-hidden="true" />
           </div>
           <div>

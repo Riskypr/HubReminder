@@ -90,12 +90,12 @@ export default function LoginPage() {
 
   return (
     <div className="login-shell min-h-dvh flex items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto grid w-full max-w-5xl gap-8 lg:grid-cols-12 lg:items-center">
+      <div className="mx-auto grid w-full max-w-6xl gap-5 sm:gap-8 lg:grid-cols-12 lg:items-stretch">
         {/* Left Hero Column on Desktop (lg:col-span-6) */}
-        <section className="relative hidden overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-[#1E3A8A] via-[#2563EB] to-[#7C3AED] p-10 text-white shadow-2xl shadow-primary/25 lg:col-span-6 lg:flex lg:min-h-[38rem] lg:flex-col lg:justify-between">
+        <section className="relative hidden overflow-hidden rounded-[2rem] bg-[linear-gradient(135deg,#0759d8,#0344b8)] p-8 text-white shadow-2xl shadow-primary/25 sm:p-10 lg:col-span-6 lg:flex lg:min-h-[38rem] lg:flex-col lg:justify-between">
           {/* Decorative glowing background elements */}
-          <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border-[36px] border-white/10 blur-xs" />
-          <div className="pointer-events-none absolute -bottom-28 -left-16 h-80 w-80 rounded-full border-[40px] border-white/10 blur-xs" />
+          <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full border-[36px] border-white/10" />
+          <div className="pointer-events-none absolute -bottom-28 -left-16 h-80 w-80 rounded-full border-[40px] border-white/10" />
 
           <div className="relative space-y-6">
             <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-white/20 bg-white/15 shadow-lg backdrop-blur-md">
@@ -144,9 +144,9 @@ export default function LoginPage() {
         </section>
 
         {/* Right Auth Form Column (lg:col-span-6) */}
-        <div className="card mx-auto w-full max-w-md space-y-6 border-slate-200/90 bg-white/95 p-7 shadow-xl shadow-slate-900/5 sm:p-9 lg:col-span-6 lg:max-w-none">
+        <div className="card mx-auto w-full max-w-md space-y-6 border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-900/5 sm:rounded-[2rem] sm:p-9 lg:col-span-6 lg:flex lg:max-w-none lg:flex-col lg:justify-center">
           <div className="space-y-2 text-center lg:text-left">
-            <div className="mx-auto mb-3 flex h-13 w-13 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/20 lg:mx-0" aria-hidden="true">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/20 lg:mx-0" aria-hidden="true">
               <Clock3 size={26} strokeWidth={2.2} />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">
@@ -176,6 +176,7 @@ export default function LoginPage() {
                     id="fullname-input"
                     type="text"
                     required
+                    autoComplete="name"
                     className="input pl-11 text-xs"
                     placeholder="Nama Lengkap Anda"
                     value={fullName}
@@ -199,6 +200,7 @@ export default function LoginPage() {
                   id="email-input"
                   type="email"
                   required
+                  autoComplete="email"
                   className="input pl-11 text-xs"
                   placeholder="nama@email.com"
                   value={email}
@@ -222,6 +224,7 @@ export default function LoginPage() {
                   type="password"
                   required
                   minLength={6}
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
                   className="input pl-11 text-xs"
                   placeholder="Minimal 6 karakter"
                   value={password}

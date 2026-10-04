@@ -116,7 +116,7 @@ export default function ConfirmDialog({
         aria-describedby="confirm-dialog-description"
         className="hub-dialog-enter relative w-full max-w-md overflow-hidden rounded-3xl border border-white/80 bg-white/95 p-6 shadow-2xl shadow-slate-950/25 backdrop-blur-xl sm:p-7"
       >
-        {/* Subtle decorative background gradient */}
+        {/* Subtle decorative glow */}
         <div className="pointer-events-none absolute -top-24 -right-24 h-48 w-48 rounded-full bg-primary/10 blur-2xl" />
 
         <div className="flex items-start gap-4">

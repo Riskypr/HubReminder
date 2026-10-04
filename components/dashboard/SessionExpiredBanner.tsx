@@ -8,7 +8,7 @@ export default function SessionExpiredBanner() {
   return (
     <div
       role="alert"
-      className="relative overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50/90 via-amber-50/60 to-white p-4 shadow-sm sm:p-5"
+      className="relative overflow-hidden rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:p-5"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3.5">

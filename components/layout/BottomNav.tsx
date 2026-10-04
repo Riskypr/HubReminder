@@ -42,7 +42,7 @@ export default function BottomNav() {
         {/* Desktop Brand Header */}
         <div className="mb-6 hidden w-full px-2 lg:block">
           <Link href="/" className="flex items-center gap-3" aria-label="HubReminder, ke Dashboard">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary via-blue-600 to-[#7C3AED] text-white shadow-lg shadow-primary/25">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-lg shadow-primary/25">
               <Clock3 size={22} strokeWidth={2.2} aria-hidden="true" />
             </span>
             <div className="min-w-0">

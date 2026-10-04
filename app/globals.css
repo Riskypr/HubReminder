@@ -36,11 +36,7 @@
 
   body {
     @apply text-text-primary antialiased;
-    background:
-      radial-gradient(ellipse at 85% -10%, rgb(124 58 237 / 8%), transparent 36rem),
-      radial-gradient(ellipse at 10% -5%, rgb(37 99 235 / 7%), transparent 32rem),
-      radial-gradient(circle at 50% 100%, rgb(241 245 249 / 60%), transparent 40rem),
-      #F8FAFC;
+    background: #F8FAFC;
     min-height: 100dvh;
   }
 
@@ -111,10 +107,7 @@
   .feedback-success { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }
 
   .login-shell {
-    background:
-      radial-gradient(ellipse at 15% 15%, rgb(124 58 237 / 12%), transparent 36rem),
-      radial-gradient(ellipse at 85% 85%, rgb(37 99 235 / 12%), transparent 36rem),
-      #F8FAFC;
+    background: #F8FAFC;
   }
 
   .skeleton {
@@ -141,10 +134,11 @@
 
   /* Primary Button */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-[#4F46E5] text-white font-semibold px-5 py-3
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl text-white font-semibold px-5 py-3
            min-h-[46px] text-sm shadow-md shadow-primary/20
            transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105 active:translate-y-0 active:scale-[0.99]
            disabled:opacity-50 disabled:pointer-events-none;
+    background: linear-gradient(135deg, #0759d8, #0344b8);
   }
 
   /* Secondary/outline Button */

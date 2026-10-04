@@ -82,12 +82,12 @@ export default function PermissionPrompt({
   }
 
   return (
-    <div className="card relative overflow-hidden border-primary/20 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white p-5 sm:p-6 shadow-sm">
+    <div className="card relative overflow-hidden border-primary/20 bg-white p-5 sm:p-6 shadow-sm">
       <div className="pointer-events-none absolute -top-12 -right-12 h-36 w-36 rounded-full bg-primary/10 blur-xl" />
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-white shadow-md shadow-primary/25" aria-hidden="true">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/25" aria-hidden="true">
             <BellRing size={22} />
           </div>
 

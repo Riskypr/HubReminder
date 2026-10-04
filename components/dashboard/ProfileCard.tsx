@@ -68,7 +68,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
     .toUpperCase();
 
   return (
-    <div className="card relative flex h-full flex-col justify-between overflow-hidden border-slate-200/90 bg-gradient-to-br from-white via-white to-blue-50/40 p-5 shadow-sm space-y-4">
+    <div className="card relative flex h-full flex-col justify-between overflow-hidden border-slate-200/90 bg-white p-5 shadow-sm space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3.5 min-w-0">
           {/* Foto Profil Pengguna dengan Fallback Avatar */}
@@ -82,7 +82,7 @@ export default function ProfileCard({ profile, isConnected }: ProfileCardProps) 
               />
             ) : (
               <div
-                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-[#7C3AED] text-sm font-bold text-white shadow-md shadow-primary/20"
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-sm font-bold text-white shadow-md shadow-primary/20"
                 aria-hidden="true"
               >
                 {initials || <User size={22} />}
