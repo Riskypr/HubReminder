@@ -146,27 +146,33 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
       aria-label="Form pengaturan reminder"
     >
       {/* Toggle Utama: Aktifkan Reminder (Full Width on Desktop Grid) */}
-      <div className="card flex items-center justify-between p-5 border-slate-200/90 bg-white lg:col-span-12">
-        <div className="flex items-center gap-4">
-          <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${enabled ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
+      <div className={`card flex items-center justify-between gap-4 border-slate-200/90 bg-white p-5 lg:col-span-12 ${enabled ? 'border-primary/20' : ''}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-colors sm:h-12 sm:w-12 ${enabled ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-400'}`}>
             <BellRing size={22} aria-hidden="true" />
           </div>
-          <div>
-            <h2 className="text-base font-bold text-text-primary tracking-tight">Aktifkan Layanan Pengingat</h2>
-            <p className="text-xs text-text-secondary mt-0.5">
+          <div className="min-w-0">
+            <h2 id="reminder-service-title" className="text-sm font-bold tracking-tight text-text-primary sm:text-base">Aktifkan Layanan Pengingat</h2>
+            <p id="reminder-service-description" className="mt-1 text-xs leading-relaxed text-text-secondary sm:text-sm">
               HubReminder akan memantau absensi dan mengirimkan push notification pada jadwal yang ditentukan.
             </p>
           </div>
         </div>
 
-        <label className="relative inline-flex items-center cursor-pointer" htmlFor="toggle-enabled">
+        <label className="flex shrink-0 cursor-pointer flex-col items-center gap-1.5" htmlFor="toggle-enabled">
           <input
             id="toggle-enabled"
             type="checkbox"
+            role="switch"
+            aria-labelledby="reminder-service-title"
+            aria-describedby="reminder-service-description reminder-service-status"
             className="sr-only peer"
             {...register('enabled')}
           />
-          <div className="w-12 h-6.5 bg-slate-200 rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/20 after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:after:translate-x-5.5" />
+          <span aria-hidden="true" className="relative h-7 w-12 rounded-full bg-slate-300 transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:outline-none peer-focus-visible:ring-4 peer-focus-visible:ring-primary/25" />
+          <span id="reminder-service-status" className={`text-[11px] font-semibold ${enabled ? 'text-primary' : 'text-text-muted'}`}>
+            {enabled ? 'Aktif' : 'Nonaktif'}
+          </span>
         </label>
       </div>
 
