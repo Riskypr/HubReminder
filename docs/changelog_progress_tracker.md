@@ -9,6 +9,7 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Removed**: Uji coba push notification dari halaman pengaturan dan endpoint khusus `/api/push/test`.
 - **Changed**: Perapian UI login dengan proporsi panel dan jarak responsif yang lebih baik, ukuran logo konsisten, teks input lebih mudah dibaca, serta autocomplete untuk nama, email, dan kata sandi.
 - **Changed**: Gradient brand pada tombol dan elemen UI diseragamkan ke `135deg, #0759d8, #0344b8`. Gradient dekoratif pada latar/kartu netral diganti warna solid agar keterbacaan tetap terjaga.
+- **Fixed**: Sapaan dashboard dan tanggal kini mengikuti timezone profil pengguna, bukan timezone runtime server, sehingga tidak bergeser saat aplikasi dideploy pada server UTC.
 
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:

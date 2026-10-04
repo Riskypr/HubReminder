@@ -93,7 +93,14 @@ export default async function DashboardPage() {
 
   // Greeting format
   const now = new Date();
-  const currentHour = now.getHours();
+  const hourPart = new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    timeZone: tz,
+  })
+    .formatToParts(now)
+    .find((part) => part.type === 'hour')?.value;
+  const currentHour = Number(hourPart ?? 0);
   const greeting =
     currentHour < 11
       ? 'Selamat Pagi'
@@ -111,6 +118,7 @@ export default async function DashboardPage() {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    timeZone: tz,
   }).format(now);
 
   return (
