@@ -1,9 +1,0 @@
-{
-  "manifest_version": 3,
-  "name": "Monev Token Helper",
-  "version": "1.1.1",
-  "description": "Cari dan salin token dari sesi login situs yang sedang dibuka.",
-  "permissions": ["activeTab", "scripting", "cookies", "clipboardWrite"],
-  "optional_host_permissions": ["https://monev.maganghub.kemnaker.go.id/*", "https://monev-api.maganghub.kemnaker.go.id/*"],
-  "action": {"default_title": "Monev Token Helper", "default_popup": "popup.html"}
-}
