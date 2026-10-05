@@ -8,6 +8,7 @@ import { useState } from 'react';
 import {
   BellRing,
   Check,
+  ChevronDown,
   Clock3,
   Hash,
   Pencil,
@@ -182,30 +183,31 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
           <div className="space-y-6 lg:col-span-6">
             {/* Maks reminder per hari */}
             <div className="card space-y-4 border-slate-200/90 bg-white p-5">
-              <div className="flex items-center justify-between">
+              <div className="space-y-2">
                 <label htmlFor="max-reminders" className="label flex items-center gap-2 mb-0">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-primary">
                     <Hash size={15} />
                   </span>
                   <span>Maksimum Pengingat per Hari</span>
                 </label>
-                <span className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                  {watch('max_reminders_per_day')}x / hari
-                </span>
+                <p id="max-reminders-description" className="text-xs leading-relaxed text-text-muted">
+                  Pilih batas maksimum pengingat yang boleh dikirim setiap hari.
+                </p>
               </div>
-              <p className="text-xs text-text-muted">
-                Batas pengingat maksimal yang boleh dikirimkan dalam 1 hari agar tidak berlebihan.
-              </p>
-              <div className="flex items-center gap-4 pt-1">
-                <input
+              <div className="relative">
+                <select
                   id="max-reminders"
-                  type="range"
-                  min={1}
-                  max={10}
-                  step={1}
-                  className="flex-1 accent-primary h-2 cursor-pointer bg-slate-200 rounded-lg"
+                  aria-describedby="max-reminders-description"
+                  className="input w-full appearance-none pr-10 font-semibold"
                   {...register('max_reminders_per_day', { valueAsNumber: true })}
-                />
+                >
+                  {Array.from({ length: 20 }, (_, index) => index + 1).map((count) => (
+                    <option key={count} value={count}>
+                      {count} reminder per hari
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
               </div>
               {errors.max_reminders_per_day && (
                 <p className="text-xs text-red-600 font-medium">{errors.max_reminders_per_day.message}</p>

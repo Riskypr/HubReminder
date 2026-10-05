@@ -32,7 +32,7 @@ module.exports = {
         'warning-bg':           '#FFF4DC',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-google-sans-flex)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         card:   '1rem',    /* 16px = rounded-2xl */

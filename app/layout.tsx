@@ -1,8 +1,15 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next';
+import { Google_Sans_Flex } from 'next/font/google';
 import './globals.css';
 import ServiceWorkerRegister from '@/components/pwa/ServiceWorkerRegister';
 import ToastProvider from '@/components/providers/ToastProvider';
+
+const googleSansFlex = Google_Sans_Flex({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-google-sans-flex',
+});
 
 export const metadata: Metadata = {
   title: 'HubReminder — Pengingat Laporan Harian MagangHub',
@@ -29,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id">
+    <html lang="id" className={googleSansFlex.variable}>
       <head />
       <body>
         <ServiceWorkerRegister />

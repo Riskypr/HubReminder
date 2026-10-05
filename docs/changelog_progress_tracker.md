@@ -29,6 +29,11 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Improved**: Tab pengaturan kini mem-prefetch penuh halaman tujuan yang belum aktif, termasuk data halaman dinamis, sehingga perpindahan ke Pengingat atau Akun MagangHub tidak perlu menunggu seluruh request dimulai setelah klik.
 - **Notes for Next Agent**: `SettingsTabs` mematikan prefetch untuk tab aktif dan mengaktifkannya hanya untuk halaman saudara; ini sengaja membatasi render prefetch server ke satu halaman.
 
+## [2026-10-05] - Google Sans Flex dan Dropdown Maksimum Pengingat
+- **Changed**: Google Sans Flex variable dipakai sebagai font global melalui `next/font/google` dan `font-sans` Tailwind.
+- **Changed**: Kontrol maksimum pengingat per hari diganti dari slider menjadi dropdown pilihan 1–20 agar sesuai validasi API.
+- **Notes for Next Agent**: Next.js men-download Google Font saat build lalu menyajikannya dari aset aplikasi sendiri.
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).
