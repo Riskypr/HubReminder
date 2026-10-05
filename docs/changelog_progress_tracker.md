@@ -11,6 +11,11 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: Gradient brand pada tombol dan elemen UI diseragamkan ke `135deg, #0759d8, #0344b8`. Gradient dekoratif pada latar/kartu netral diganti warna solid agar keterbacaan tetap terjaga.
 - **Fixed**: Sapaan dashboard dan tanggal kini mengikuti timezone profil pengguna, bukan timezone runtime server, sehingga tidak bergeser saat aplikasi dideploy pada server UTC.
 
+## [2026-10-05] - Panduan Mengambil Access Token MagangHub
+- **Added**: Petunjuk langkah demi langkah di halaman Hubungkan Akun untuk membuka DevTools, memilih request `refresh` pada tab Network, mengambil nilai `access_token` dari Response, dan menempelkannya ke kolom sesi.
+- **Changed**: Instruksi menegaskan bahwa token akses bersifat rahasia dan tidak boleh dibagikan; setelah diverifikasi, token tetap disimpan terenkripsi menggunakan AES-GCM.
+- **Notes for Next Agent**: Parser sesi menerima JWT mentah sebagai nilai access token, sehingga salin nilainya saja tanpa tanda petik atau seluruh response JSON.
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).

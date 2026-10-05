@@ -291,7 +291,16 @@ export default function ConnectAccountForm({ currentSession, currentProfile }: P
               placeholder="monev-access-token=... atau tempel nilai token JWT sesi"
             />
             <p className="text-[11px] text-text-muted leading-relaxed">
-              Dapatkan cookie dari tab Network browser pada domain <code>monev.maganghub.kemnaker.go.id</code>. Kredensial disimpan terenkripsi menggunakan AES-GCM.
+              Cara mengambil <code>access_token</code>:
+            </p>
+            <ol className="list-decimal space-y-1 pl-5 text-[11px] leading-relaxed text-text-secondary">
+              <li>Login ke <code>monev.maganghub.kemnaker.go.id</code> di browser.</li>
+              <li>Buka DevTools dengan menekan <kbd className="rounded border border-slate-200 bg-slate-50 px-1 py-0.5 font-mono">F12</kbd>, lalu pilih tab <strong>Network</strong>.</li>
+              <li>Refresh halaman MagangHub. Di daftar request, pilih <code>refresh</code>, lalu buka tab <strong>Response</strong>.</li>
+              <li>Salin nilai di dalam <code>"access_token": "…"</code> tanpa tanda petik, lalu tempel ke kolom ini.</li>
+            </ol>
+            <p className="text-[11px] text-amber-700 leading-relaxed">
+              Token ini rahasia seperti kata sandi. Jangan bagikan token atau screenshot Response. Setelah sesi diverifikasi, token disimpan terenkripsi menggunakan AES-GCM.
             </p>
           </div>
         ) : (
