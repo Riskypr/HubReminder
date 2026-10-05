@@ -28,6 +28,7 @@ self.addEventListener('push', (event) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     vibrate: [200, 100, 200],
+    actions: [{ action: 'open-attendance', title: 'Isi absensi' }],
     data: {
       url: payload.url || 'https://monev.maganghub.kemnaker.go.id/dashboard',
     },
@@ -38,8 +39,13 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl =
-    event.notification.data?.url || 'https://monev.maganghub.kemnaker.go.id/dashboard';
+  const monevUrl = 'https://monev.maganghub.kemnaker.go.id/dashboard';
+  const requestedUrl = event.notification.data?.url || monevUrl;
+  let targetUrl = monevUrl;
+  try {
+    const url = new URL(requestedUrl);
+    if (url.origin === 'https://monev.maganghub.kemnaker.go.id') targetUrl = url.href;
+  } catch {}
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
