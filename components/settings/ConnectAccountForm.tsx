@@ -276,7 +276,7 @@ export default function ConnectAccountForm({ currentSession, currentProfile }: P
           <div className="space-y-1.5">
             <label className="label flex items-center gap-1.5 text-xs" htmlFor="maganghub-cookie">
               <KeyRound size={13} className="text-primary" />
-              <span>Cookie Akses MagangHub</span>
+              <span>Token Akses MagangHub</span>
             </label>
             <textarea
               id="maganghub-cookie"
@@ -288,19 +288,44 @@ export default function ConnectAccountForm({ currentSession, currentProfile }: P
               maxLength={16_384}
               value={cookie}
               onChange={(event) => setCookie(event.target.value)}
-              placeholder="monev-access-token=... atau tempel nilai token JWT sesi"
+              placeholder="Tempel access token yang disalin dari Monev Token Helper"
             />
-            <p className="text-[11px] text-text-muted leading-relaxed">
-              Cara mengambil <code>access_token</code>:
-            </p>
-            <ol className="list-decimal space-y-1 pl-5 text-[11px] leading-relaxed text-text-secondary">
-              <li>Login ke <code>monev.maganghub.kemnaker.go.id</code> di browser.</li>
-              <li>Buka DevTools dengan menekan <kbd className="rounded border border-slate-200 bg-slate-50 px-1 py-0.5 font-mono">F12</kbd>, lalu pilih tab <strong>Network</strong>.</li>
-              <li>Refresh halaman MagangHub. Di daftar request, pilih <code>refresh</code>, lalu buka tab <strong>Response</strong>.</li>
-              <li>Salin nilai di dalam <code>"access_token": "…"</code> tanpa tanda petik, lalu tempel ke kolom ini.</li>
-            </ol>
+            <details className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-[11px] leading-relaxed">
+              <summary className="cursor-pointer font-semibold text-primary">
+                Cara instal dan menggunakan Monev Token Helper
+              </summary>
+              <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-text-secondary">
+                <li>
+                  <a
+                    href="https://github.com/Riskypr/HubReminder/archive/refs/heads/main.zip"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-primary underline"
+                  >
+                    Unduh ZIP HubReminder
+                  </a>{' '}
+                  lalu ekstrak arsipnya.
+                </li>
+                <li>
+                  Buka <code>chrome://extensions</code> (Chrome) atau <code>edge://extensions</code> (Edge), aktifkan <strong>Developer mode / Mode pengembang</strong>, lalu pilih <strong>Load unpacked / Muat ekstensi yang belum dipaketkan</strong>.
+                </li>
+                <li>
+                  Pilih folder <code>monev-token-extension/monev-token-extension</code> di dalam hasil ekstrak—folder yang berisi <code>manifest.json</code>.
+                </li>
+                <li>
+                  Di browser yang sama, login ke <code>monev.maganghub.kemnaker.go.id/dashboard</code>. Buka ikon puzzle <strong>Extensions</strong>, lalu pilih atau pin <strong>Monev Token Helper</strong>.
+                </li>
+                <li>
+                  Klik <strong>Cari access token</strong>, lalu <strong>Salin token</strong> pada hasil access token. Jika belum ditemukan, klik <strong>Cari refresh token + cookies API</strong> dan izinkan akses situs yang diminta; salin hasil access token, bukan refresh token.
+                </li>
+                <li>Tempel token ke kolom ini dan klik <strong>Hubungkan Akun</strong>.</li>
+              </ol>
+              <p className="mt-2 text-amber-700">
+                Berikan izin extension hanya untuk sesi akun Anda sendiri. Token akses bersifat rahasia seperti kata sandi; jangan bagikan token atau screenshot hasilnya.
+              </p>
+            </details>
             <p className="text-[11px] text-amber-700 leading-relaxed">
-              Token ini rahasia seperti kata sandi. Jangan bagikan token atau screenshot Response. Setelah sesi diverifikasi, token disimpan terenkripsi menggunakan AES-GCM.
+              Setelah sesi diverifikasi, token disimpan terenkripsi menggunakan AES-GCM.
             </p>
           </div>
         ) : (
