@@ -16,6 +16,11 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: Instruksi menegaskan bahwa token akses bersifat rahasia dan tidak boleh dibagikan; setelah diverifikasi, token tetap disimpan terenkripsi menggunakan AES-GCM.
 - **Notes for Next Agent**: Parser sesi menerima JWT mentah sebagai nilai access token, sehingga salin nilainya saja tanpa tanda petik atau seluruh response JSON.
 
+## [2026-10-05] - Perbaikan Riwayat dan Toggle Pengaturan
+- **Fixed**: Riwayat sekarang mengelompokkan dan menampilkan hari serta waktu sesuai timezone profil pengguna, dan mengambil sampai 30 hari berbeda meski ada banyak pengecekan dalam sehari.
+- **Changed**: Navigasi pengaturan dirapikan menjadi pilihan bergaya toggle; metode koneksi Akun MagangHub memakai switch Cookie Sesi / Email & Kata Sandi dan switch snooze reminder diseragamkan.
+- **Notes for Next Agent**: `HistoryTimeline` menerima timezone dari profil, `dateKeyInTz` dipakai untuk pengelompokan lokal, dan histori notifikasi memuat hingga 600 log (maksimal 20 per hari untuk 30 hari).
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).

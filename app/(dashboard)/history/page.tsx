@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { getAttendanceHistory, getNotificationLogs } from '@/lib/services/historyService';
 import HistoryTimeline from '@/components/history/HistoryTimeline';
+import { getUserProfile } from '@/lib/services/profileService';
+import { DEFAULT_TIMEZONE } from '@/lib/utils/time';
 import { History, Sparkles } from 'lucide-react';
 
 export const metadata = {
@@ -20,9 +22,11 @@ export default async function HistoryPage() {
 
   if (!user) redirect('/login');
 
+  const userProfile = await getUserProfile(user.id, supabase);
+  const timezone = userProfile?.timezone || DEFAULT_TIMEZONE;
   const [checks, logs] = await Promise.all([
-    getAttendanceHistory(user.id, 30, supabase),
-    getNotificationLogs(user.id, 50, supabase),
+    getAttendanceHistory(user.id, 30, supabase, timezone),
+    getNotificationLogs(user.id, 600, supabase),
   ]);
 
   return (
@@ -51,7 +55,7 @@ export default async function HistoryPage() {
       </div>
 
       {/* Timeline with Stats & Desktop Grid */}
-      <HistoryTimeline checks={checks} logs={logs} />
+      <HistoryTimeline checks={checks} logs={logs} timezone={timezone} />
     </div>
   );
 }

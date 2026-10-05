@@ -3,6 +3,7 @@
 
 import type { AttendanceCheck } from '@/lib/types/attendance';
 import type { NotificationLog } from '@/lib/types/reminder';
+import { dateKeyInTz } from '@/lib/utils/dateKey';
 import {
   BellRing,
   Calendar,
@@ -20,6 +21,7 @@ import {
 interface HistoryTimelineProps {
   checks: AttendanceCheck[];
   logs: NotificationLog[];
+  timezone: string;
 }
 
 const STATUS_CONFIG: Record<
@@ -62,7 +64,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) {
+export default function HistoryTimeline({ checks, logs, timezone }: HistoryTimelineProps) {
   if (checks.length === 0) {
     return (
       <div className="card flex flex-col items-center justify-center p-12 text-center border-dashed border-2 border-slate-200 bg-white/60">
@@ -80,7 +82,7 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
   // Kelompokkan log notifikasi per hari
   const logsByDay: Record<string, NotificationLog[]> = {};
   for (const log of logs) {
-    const day = log.sent_at.slice(0, 10);
+    const day = dateKeyInTz(log.sent_at, timezone);
     if (!logsByDay[day]) logsByDay[day] = [];
     logsByDay[day].push(log);
   }
@@ -88,7 +90,7 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
   // Dedupe check per hari — tampilkan status terbaru tiap hari
   const checksByDay: Record<string, AttendanceCheck> = {};
   for (const check of checks) {
-    const day = check.checked_at.slice(0, 10);
+    const day = dateKeyInTz(check.checked_at, timezone);
     if (!checksByDay[day]) checksByDay[day] = check;
   }
 
@@ -159,7 +161,7 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
                       <span>{formatDate(day)}</span>
                     </time>
                     <p className="text-[11px] text-text-muted">
-                      Dicek {formatTime(check.checked_at)}
+                      Dicek {formatTime(check.checked_at, timezone)}
                     </p>
                   </div>
 
@@ -185,7 +187,7 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
                           <span className="font-medium text-slate-700">Reminder #{log.sequence_today}</span>
                           <span className="inline-flex items-center gap-1 text-[11px] text-text-muted tabular-nums">
                             <Clock3 size={11} aria-hidden="true" />
-                            {formatTime(log.sent_at)}
+                            {formatTime(log.sent_at, timezone)}
                           </span>
                         </div>
                       ))}
@@ -211,19 +213,21 @@ export default function HistoryTimeline({ checks, logs }: HistoryTimelineProps) 
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('id-ID', {
+  const d = new Date(`${dateStr}T12:00:00.000Z`);
+  return new Intl.DateTimeFormat('id-ID', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric',
-  });
+    timeZone: 'UTC',
+  }).format(d);
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('id-ID', {
+function formatTime(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat('id-ID', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  });
+    timeZone: timezone,
+  }).format(new Date(iso));
 }

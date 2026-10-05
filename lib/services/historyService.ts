@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { dateKeyInTz } from '@/lib/utils/dateKey';
 import { isTodayInTz, DEFAULT_TIMEZONE } from '@/lib/utils/time';
 import type { AttendanceCheck } from '@/lib/types/attendance';
 import type { NotificationLog } from '@/lib/types/reminder';
@@ -59,18 +60,37 @@ export async function getLatestStatusCheck(
 export async function getAttendanceHistory(
   userId: string,
   limit = 30,
-  client?: SupabaseServerClient
+  client?: SupabaseServerClient,
+  tz = DEFAULT_TIMEZONE,
 ): Promise<AttendanceCheck[]> {
   const supabase = client ?? (await createClient());
+  const days: AttendanceCheck[] = [];
+  const seenDays = new Set<string>();
+  const pageSize = 1000;
 
-  const { data } = await supabase
-    .from('attendance_checks')
-    .select('*')
-    .eq('user_id', userId)
-    .order('checked_at', { ascending: false })
-    .limit(limit);
+  for (let offset = 0; days.length < limit; offset += pageSize) {
+    const { data, error } = await supabase
+      .from('attendance_checks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('checked_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-  return (data ?? []) as AttendanceCheck[];
+    if (error || !data?.length) break;
+
+    for (const row of data as AttendanceCheck[]) {
+      const day = dateKeyInTz(row.checked_at, tz);
+      if (seenDays.has(day)) continue;
+      seenDays.add(day);
+      days.push(row);
+      if (days.length >= limit) break;
+    }
+
+    if (data.length < pageSize) break;
+  }
+
+  return days;
 }
 
 /**

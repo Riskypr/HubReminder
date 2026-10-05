@@ -246,21 +246,27 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
                   <PauseCircle size={20} aria-hidden="true" />
                 </span>
                 <div>
-                  <h3 className="text-sm font-bold text-text-primary">Tunda Hari Ini (Snooze)</h3>
-                  <p className="text-xs text-text-muted mt-0.5">
+                  <h3 id="snooze-title" className="text-sm font-bold text-text-primary">Tunda Hari Ini (Snooze)</h3>
+                  <p id="snooze-description" className="text-xs text-text-muted mt-0.5">
                     Hentikan pengingat khusus untuk hari ini (misal sedang cuti atau izin).
                   </p>
                 </div>
               </div>
 
-              <label className="relative inline-flex items-center cursor-pointer" htmlFor="snooze-today">
+              <label className="flex shrink-0 cursor-pointer flex-col items-center gap-1.5" htmlFor="snooze-today">
                 <input
                   id="snooze-today"
                   type="checkbox"
+                  role="switch"
+                  aria-labelledby="snooze-title"
+                  aria-describedby="snooze-description snooze-status"
                   className="sr-only peer"
                   {...register('snooze_today')}
                 />
-                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-amber-500 peer-focus:ring-2 peer-focus:ring-amber-400 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:after:translate-x-full" />
+                <span aria-hidden="true" className="relative h-7 w-12 rounded-full bg-slate-300 transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-amber-500 peer-checked:after:translate-x-5 peer-focus-visible:outline-none peer-focus-visible:ring-4 peer-focus-visible:ring-amber-400/25" />
+                <span id="snooze-status" className={`text-[11px] font-semibold ${watch('snooze_today') ? 'text-amber-700' : 'text-text-muted'}`}>
+                  {watch('snooze_today') ? 'Ditunda' : 'Tidak Ditunda'}
+                </span>
               </label>
             </div>
           </div>
