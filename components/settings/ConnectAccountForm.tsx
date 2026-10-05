@@ -297,20 +297,20 @@ export default function ConnectAccountForm({ currentSession, currentProfile }: P
               <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-text-secondary">
                 <li>
                   <a
-                    href="https://github.com/Riskypr/HubReminder/archive/refs/heads/main.zip"
+                    href="https://github.com/Riskypr/HubReminder/raw/refs/heads/main/monev-token-extension/Monev-Token-Helper.zip"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-semibold text-primary underline"
                   >
-                    Unduh ZIP HubReminder
+                    Unduh ZIP Monev Token Helper
                   </a>{' '}
-                  lalu ekstrak arsipnya.
+                  lalu ekstrak arsipnya. ZIP ini hanya berisi file extension.
                 </li>
                 <li>
                   Buka <code>chrome://extensions</code> (Chrome) atau <code>edge://extensions</code> (Edge), aktifkan <strong>Developer mode / Mode pengembang</strong>, lalu pilih <strong>Load unpacked / Muat ekstensi yang belum dipaketkan</strong>.
                 </li>
                 <li>
-                  Pilih folder <code>monev-token-extension/monev-token-extension</code> di dalam hasil ekstrak—folder yang berisi <code>manifest.json</code>.
+                  Pilih folder hasil ekstrak yang berisi file <code>manifest.json</code>.
                 </li>
                 <li>
                   Di browser yang sama, login ke <code>monev.maganghub.kemnaker.go.id/dashboard</code>. Buka ikon puzzle <strong>Extensions</strong>, lalu pilih atau pin <strong>Monev Token Helper</strong>.

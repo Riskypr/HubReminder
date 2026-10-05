@@ -9,7 +9,7 @@ const cookieOrigins = [
   'https://monev.maganghub.kemnaker.go.id/*',
   'https://monev-api.maganghub.kemnaker.go.id/*'
 ];
-const reloadHint = 'Izin API belum tersedia pada ekstensi yang dimuat. Buka chrome://extensions atau edge://extensions, klik Reload pada Monev Token Helper. Jika tetap gagal, hapus lalu Load unpacked kembali dari folder monev-token-extension/monev-token-extension yang berisi manifest.json.';
+const reloadHint = 'Izin API belum tersedia pada ekstensi yang dimuat. Buka chrome://extensions atau edge://extensions, klik Reload pada Monev Token Helper. Jika tetap gagal, hapus lalu Load unpacked kembali dari folder hasil ekstrak ZIP yang berisi manifest.json.';
 
 function tokenKey(key) {
   return /^(?:monev)?(?:refresh|access)token$/.test(key.toLowerCase().replace(/[^a-z0-9]/g, ''));

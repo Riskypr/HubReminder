@@ -4,10 +4,10 @@ Ekstensi Chrome / Microsoft Edge (Manifest V3) untuk mencari `monev_refresh_toke
 
 ## Instalasi
 
-1. Buka `chrome://extensions` atau `edge://extensions`.
-2. Aktifkan **Developer mode / Mode pengembang**.
-3. Klik **Load unpacked / Muat ekstensi yang belum dipaketkan**.
-4. Jika mengambil dari ZIP HubReminder, pilih folder `monev-token-extension/monev-token-extension` di dalam hasil ekstrak (folder yang berisi `manifest.json`).
+1. [Unduh ZIP Monev Token Helper](https://github.com/Riskypr/HubReminder/raw/refs/heads/main/monev-token-extension/Monev-Token-Helper.zip) yang hanya berisi file extension, lalu ekstrak ZIP tersebut.
+2. Buka `chrome://extensions` atau `edge://extensions`.
+3. Aktifkan **Developer mode / Mode pengembang**.
+4. Klik **Load unpacked / Muat ekstensi yang belum dipaketkan**, lalu pilih folder hasil ekstrak yang berisi `manifest.json`.
 5. Buka https://monev.maganghub.kemnaker.go.id/dashboard dan login. Klik ikon puzzle **Extensions** lalu pilih atau pin **Monev Token Helper**.
 6. Klik **Cari access token** untuk localStorage, sessionStorage, dan slot memori Nuxt `monev-access-token` yang dipakai situs Monev.
 7. Jika access token belum ditemukan, klik **Cari refresh token + cookies API**, lalu izinkan akses ke situs Monev dan API Monev untuk membaca cookies termasuk HttpOnly.

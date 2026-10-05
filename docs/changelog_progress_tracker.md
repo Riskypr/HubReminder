@@ -42,6 +42,10 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: Bagian koneksi akun kini memandu pengguna mengunduh, memasang, dan menjalankan extension `Monev Token Helper`, lalu menyalin access token ke form. Panduan README extension diselaraskan dengan struktur folder dan membedakan access token dari refresh token.
 - **Notes for Next Agent**: Folder extension yang dimuat browser adalah `monev-token-extension/monev-token-extension`, tempat `manifest.json` berada. Extension hanya meminta izin cookies untuk domain Monev dan API Monev setelah pengguna memilih pencarian cookies.
 
+## [2026-10-05] - Unduhan Monev Token Helper Saja
+- **Changed**: Halaman koneksi akun dan README kini mengarahkan pengguna ke ZIP khusus yang hanya berisi file extension, bukan arsip seluruh repository. Langkah instalasi meminta pengguna memuat folder hasil ekstrak yang langsung berisi `manifest.json`.
+- **Notes for Next Agent**: Arsip `monev-token-extension/Monev-Token-Helper.zip` harus dibuat ulang jika isi extension berubah.
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).
