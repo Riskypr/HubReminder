@@ -10,7 +10,7 @@ export default function DashboardLoading() {
           <div className="w-10 h-10 rounded-full bg-border/60" />
           <div className="space-y-2 flex-1">
             <div className="h-5 w-28 bg-border/80 rounded-full" />
-            <div className="h-3.5 w-3/4 bg-border/50 rounded" />
+            <div className="h-3.5 w-3/4 bg-border/50 rounded" /> 
           </div>
         </div>
         <div className="pt-2 border-t border-border flex justify-between">
