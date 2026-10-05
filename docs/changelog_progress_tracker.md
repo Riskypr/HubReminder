@@ -5,6 +5,7 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Changed**: Template reminder WhatsApp menyertakan URL dashboard Monev dalam bentuk tautan langsung yang bisa diketuk untuk mengisi absensi.
 - **Fixed**: Pendaftaran Web Push sekarang memakai subscription Service Worker aktif, menyegarkan subscription lama bila kunci VAPID berubah, memvalidasi bentuk kunci, dan memberi langkah pemulihan untuk error layanan push browser.
 - **Changed**: Notifikasi web menampilkan tombol **Isi absensi** dan klik notifikasi membuka dashboard Monev MagangHub.
 - **Changed**: Perbaikan toggle Aktifkan Layanan Pengingat dengan ukuran konsisten, status Aktif/Nonaktif, tata letak responsif, dan dukungan fokus keyboard serta label aksesibel.

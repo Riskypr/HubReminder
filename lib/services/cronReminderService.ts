@@ -27,6 +27,7 @@ export function formatCronReminderMessage(members: CronReminderMember[], now = n
     '*Status peserta:*',
     ...members.map((member) => `• ${member.name} — ${STATUS_LABEL[member.status]}`),
     '',
-    'Bagi yang belum mengisi laporan, silakan buka MagangHub dan isi laporan hari ini.',
+    'Bagi yang belum mengisi laporan, silakan isi absensi hari ini melalui Monev:',
+    'https://monev.maganghub.kemnaker.go.id/dashboard',
   ].join('\n');
 }
