@@ -210,20 +210,24 @@ export default function StatusCard({
           </span>
         </div>
 
-        {currentStatus === 'belum_lapor' && (
-          <div className="inline-flex items-center gap-2 sm:justify-end text-blue-700 font-medium">
-            <BellRing size={15} className="text-blue-500" aria-hidden="true" />
+        {(currentStatus === 'belum_lapor' || currentStatus === 'selesai') && (
+          <div className={`inline-flex items-center gap-2 sm:justify-end font-medium ${
+            currentStatus === 'selesai' && sentToday === 0 ? 'text-emerald-700' : 'text-blue-700'
+          }`}>
+            {currentStatus === 'selesai' && sentToday === 0 ? (
+              <CheckCircle2 size={15} className="text-emerald-500" aria-hidden="true" />
+            ) : (
+              <BellRing size={15} className="text-blue-500" aria-hidden="true" />
+            )}
             <span>
-              {sentToday <= maxPerDay
+              {currentStatus === 'selesai' && sentToday === 0
+                ? 'Tidak ada reminder diperlukan'
+                : currentStatus === 'selesai'
+                ? `${sentToday} reminder terkirim sebelum laporan selesai`
+                : sentToday <= maxPerDay
                 ? `${sentToday}/${maxPerDay} reminder terkirim hari ini`
                 : `${sentToday} reminder sudah terkirim`}
             </span>
-          </div>
-        )}
-        {currentStatus === 'selesai' && (
-          <div className="inline-flex items-center gap-1.5 sm:justify-end text-emerald-700 font-medium">
-            <CheckCircle2 size={15} className="text-emerald-500" aria-hidden="true" />
-            <span>Tidak ada reminder diperlukan</span>
           </div>
         )}
       </div>

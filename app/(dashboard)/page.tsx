@@ -8,6 +8,7 @@ import { getUserProfile } from '@/lib/services/profileService';
 import { checkAndUpdateAttendance } from '@/lib/services/maganghubService';
 import { DEFAULT_TIMEZONE } from '@/lib/utils/time';
 import StatusCard from '@/components/dashboard/StatusCard';
+import DashboardAutoRefresh from '@/components/dashboard/DashboardAutoRefresh';
 import ProfileCard from '@/components/dashboard/ProfileCard';
 import SessionExpiredBanner from '@/components/dashboard/SessionExpiredBanner';
 import PermissionPromptWrapper from '@/components/dashboard/PermissionPromptWrapper';
@@ -123,6 +124,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardAutoRefresh />
       {/* Top Welcome / Hero Banner for Desktop Grid */}
       <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur-md sm:p-7">
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-2xl" />
