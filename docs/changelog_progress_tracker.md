@@ -34,6 +34,10 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: Kontrol maksimum pengingat per hari diganti dari slider menjadi dropdown pilihan 1–20 agar sesuai validasi API.
 - **Notes for Next Agent**: Next.js men-download Google Font saat build lalu menyajikannya dari aset aplikasi sendiri.
 
+## [2026-10-05] - Penanganan Batas Email Pendaftaran
+- **Fixed**: Form pendaftaran mencegah submit ganda, menghentikan pengiriman ulang setelah email verifikasi sukses atau terkena rate limit, dan menampilkan instruksi yang jelas saat email dibatasi.
+- **Notes for Next Agent**: Kuota pengiriman email ditentukan oleh Supabase Auth/SMTP. SMTP bawaan memiliki batas rendah; untuk pendaftaran ke pengguna umum, konfigurasi SMTP khusus pada proyek Supabase tetap diperlukan.
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).

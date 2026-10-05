@@ -1,7 +1,7 @@
 // app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -22,6 +22,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
+const SIGNUP_RATE_LIMIT_MESSAGE =
+  'Email verifikasi sedang dibatasi oleh Supabase. Tunggu sebelum mencoba lagi, lalu muat ulang halaman. Untuk pendaftaran umum, admin perlu mengatur SMTP khusus di proyek Supabase.';
+const SIGNUP_CONFIRMATION_MESSAGE =
+  'Pendaftaran berhasil! Silakan periksa inbox email Anda untuk verifikasi akun sebelum masuk.';
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -31,17 +36,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmationPendingEmail, setConfirmationPendingEmail] = useState('');
+  const [signupRateLimited, setSignupRateLimited] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+  const submissionInProgress = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (
+      submissionInProgress.current ||
+      (isSignUp && signupRateLimited) ||
+      (isSignUp && confirmationPendingEmail === normalizedEmail)
+    ) return;
+
+    submissionInProgress.current = true;
     setLoading(true);
     setMessage(null);
 
     try {
       if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
             data: {
@@ -57,8 +73,9 @@ export default function LoginPage() {
           router.push('/');
           router.refresh();
         } else {
+          setConfirmationPendingEmail(normalizedEmail);
           setMessage({
-            text: 'Pendaftaran berhasil! Silakan periksa inbox email Anda untuk verifikasi akun sebelum masuk.',
+            text: SIGNUP_CONFIRMATION_MESSAGE,
             type: 'success',
           });
           toast.success('Silakan cek email untuk konfirmasi akun.');
@@ -76,8 +93,16 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch (err: unknown) {
-      const error = err as Error;
-      const errorMsg = error.message || 'Terjadi kesalahan saat otentikasi.';
+      const error = err as { message?: string; code?: string };
+      const rawError = error.message || 'Terjadi kesalahan saat otentikasi.';
+      const isEmailRateLimit = isSignUp && (
+        error.code === 'over_email_send_rate_limit' ||
+        /email.{0,40}rate.?limit|rate.?limit.{0,40}email/i.test(rawError)
+      );
+      const errorMsg = isEmailRateLimit
+        ? SIGNUP_RATE_LIMIT_MESSAGE
+        : rawError;
+      if (isEmailRateLimit) setSignupRateLimited(true);
       setMessage({
         text: errorMsg,
         type: 'error',
@@ -85,6 +110,7 @@ export default function LoginPage() {
       toast.error(errorMsg);
     } finally {
       setLoading(false);
+      submissionInProgress.current = false;
     }
   }
 
@@ -254,11 +280,25 @@ export default function LoginPage() {
             <button
               type="submit"
               id="btn-auth-submit"
-              disabled={loading}
+              disabled={
+                loading ||
+                (isSignUp && signupRateLimited) ||
+                (isSignUp && confirmationPendingEmail === email.trim().toLowerCase())
+              }
               className="btn-primary w-full mt-2"
             >
               {loading ? (
                 <span>Memproses…</span>
+              ) : isSignUp && confirmationPendingEmail === email.trim().toLowerCase() ? (
+                <>
+                  <Check size={16} aria-hidden="true" />
+                  <span>Email Verifikasi Terkirim</span>
+                </>
+              ) : isSignUp && signupRateLimited ? (
+                <>
+                  <Clock3 size={16} aria-hidden="true" />
+                  <span>Tunggu Batas Email Pulih</span>
+                </>
               ) : isSignUp ? (
                 <>
                   <UserPlus size={16} aria-hidden="true" />
@@ -297,7 +337,13 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => {
                     setIsSignUp(true);
-                    setMessage(null);
+                    setMessage(
+                      signupRateLimited
+                        ? { text: SIGNUP_RATE_LIMIT_MESSAGE, type: 'error' }
+                        : confirmationPendingEmail === email.trim().toLowerCase()
+                        ? { text: SIGNUP_CONFIRMATION_MESSAGE, type: 'success' }
+                        : null,
+                    );
                   }}
                   className="inline-flex items-center gap-1 font-bold text-primary hover:underline ml-1"
                 >
