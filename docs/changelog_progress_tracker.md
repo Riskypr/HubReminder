@@ -18,8 +18,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 
 ## [2026-10-05] - Perbaikan Riwayat dan Toggle Pengaturan
 - **Fixed**: Riwayat sekarang mengelompokkan dan menampilkan hari serta waktu sesuai timezone profil pengguna, dan mengambil sampai 30 hari berbeda meski ada banyak pengecekan dalam sehari.
-- **Changed**: Navigasi pengaturan dirapikan menjadi pilihan bergaya toggle; metode koneksi Akun MagangHub memakai switch Cookie Sesi / Email & Kata Sandi dan switch snooze reminder diseragamkan.
+- **Changed**: Navigasi pengaturan dirapikan menjadi pilihan bergaya toggle dan switch snooze reminder diseragamkan.
 - **Notes for Next Agent**: `HistoryTimeline` menerima timezone dari profil, `dateKeyInTz` dipakai untuk pengelompokan lokal, dan histori notifikasi memuat hingga 600 log (maksimal 20 per hari untuk 30 hari).
+
+## [2026-10-05] - Kembalikan Pemilih Metode Login MagangHub
+- **Changed**: Pemilih metode login Cookie Sesi / Email & Kata Sandi dikembalikan menjadi dua tombol seperti desain sebelumnya; input dan proses koneksi tetap sama.
+- **Notes for Next Agent**: Tombol pilihan login bersifat saling eksklusif; switch pengaturan reminder dan snooze tetap dipakai.
 
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:

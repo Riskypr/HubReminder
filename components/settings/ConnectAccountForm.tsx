@@ -236,41 +236,41 @@ export default function ConnectAccountForm({ currentSession, currentProfile }: P
           </p>
         </div>
 
-        {/* Toggle Metode Login */}
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 transition-colors hover:border-primary/30 hover:bg-white sm:p-4">
-          <span className={`flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold transition-colors sm:text-sm ${loginMode === 'cookie' ? 'text-primary' : 'text-slate-500'}`}>
-            <Cookie size={16} className="shrink-0" aria-hidden="true" />
+        {/* Pilihan Metode Login */}
+        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5" role="group" aria-label="Metode login MagangHub">
+          <button
+            type="button"
+            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-all ${
+              loginMode === 'cookie'
+                ? 'bg-white text-primary shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            onClick={() => {
+              setPassword('');
+              setLoginMode('cookie');
+            }}
+            disabled={busy}
+          >
+            <Cookie size={15} aria-hidden="true" />
             <span>Cookie Sesi</span>
-          </span>
-          <span className="relative inline-flex shrink-0 items-center">
-            <input
-              type="checkbox"
-              role="switch"
-              aria-label="Metode login: Cookie Sesi atau Email dan Kata Sandi"
-              aria-checked={loginMode === 'credentials'}
-              checked={loginMode === 'credentials'}
-              onChange={(event) => {
-                if (event.target.checked) {
-                  setCookie('');
-                  setLoginMode('credentials');
-                } else {
-                  setPassword('');
-                  setLoginMode('cookie');
-                }
-              }}
-              disabled={busy}
-              className="peer sr-only"
-            />
-            <span
-              aria-hidden="true"
-              className="relative h-7 w-12 rounded-full bg-slate-300 transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-5 peer-focus-visible:outline-none peer-focus-visible:ring-4 peer-focus-visible:ring-primary/25 peer-disabled:opacity-50"
-            />
-          </span>
-          <span className={`flex min-w-0 flex-1 items-center justify-end gap-2 text-right text-xs font-semibold transition-colors sm:text-sm ${loginMode === 'credentials' ? 'text-primary' : 'text-slate-500'}`}>
+          </button>
+          <button
+            type="button"
+            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition-all ${
+              loginMode === 'credentials'
+                ? 'bg-white text-primary shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+            onClick={() => {
+              setCookie('');
+              setLoginMode('credentials');
+            }}
+            disabled={busy}
+          >
+            <LogIn size={15} aria-hidden="true" />
             <span>Email &amp; Kata Sandi</span>
-            <LogIn size={16} className="shrink-0" aria-hidden="true" />
-          </span>
-        </label>
+          </button>
+        </div>
 
         {loginMode === 'cookie' ? (
           <div className="space-y-1.5">
