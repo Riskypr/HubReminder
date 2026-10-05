@@ -25,6 +25,10 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Changed**: Pemilih metode login Cookie Sesi / Email & Kata Sandi dikembalikan menjadi dua tombol seperti desain sebelumnya; input dan proses koneksi tetap sama.
 - **Notes for Next Agent**: Tombol pilihan login bersifat saling eksklusif; switch pengaturan reminder dan snooze tetap dipakai.
 
+## [2026-10-05] - Percepat Perpindahan Antar Pengaturan
+- **Improved**: Tab pengaturan kini mem-prefetch penuh halaman tujuan yang belum aktif, termasuk data halaman dinamis, sehingga perpindahan ke Pengingat atau Akun MagangHub tidak perlu menunggu seluruh request dimulai setelah klik.
+- **Notes for Next Agent**: `SettingsTabs` mematikan prefetch untuk tab aktif dan mengaktifkannya hanya untuk halaman saudara; ini sengaja membatasi render prefetch server ke satu halaman.
+
 ## [2026-10-04] - Redesign Total UI, Grid Mode Desktop, Notifikasi Atas, dan Dialog Konfirmasi Next.js
 - **Added**:
   - Implementasi CSS Grid menyeluruh pada mode desktop untuk halaman Dashboard (`lg:grid-cols-12` bento-box grid), Riwayat (`grid-cols-1 md:grid-cols-2 lg:grid-cols-3` plus summary stats cards 4 kolom), Pengaturan (`lg:grid-cols-12` 2 kolom seimbang), dan Login (split screen 2 kolom `lg:grid-cols-12`).

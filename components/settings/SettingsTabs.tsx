@@ -16,6 +16,7 @@ export default function SettingsTabs() {
       <div className="grid grid-cols-2 gap-1.5">
         <Link
           href="/settings/reminder"
+          prefetch={!isReminder}
           aria-current={isReminder ? 'page' : undefined}
           className={`group flex min-h-14 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 text-center transition-all sm:min-h-16 sm:rounded-2xl sm:gap-3 ${
             isReminder
@@ -32,6 +33,7 @@ export default function SettingsTabs() {
 
         <Link
           href="/settings/account"
+          prefetch={isReminder}
           aria-current={!isReminder ? 'page' : undefined}
           className={`group flex min-h-14 items-center justify-center gap-2.5 rounded-xl px-3 py-2.5 text-center transition-all sm:min-h-16 sm:rounded-2xl sm:gap-3 ${
             !isReminder
