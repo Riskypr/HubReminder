@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { formatBulkReportReminder, formatCookieWarningMessage, type CronReminderMember } from '@/lib/services/cronReminderService';
+import { formatAutoReportReminder, formatBulkReportReminder, formatCookieWarningMessage, type CronReminderMember } from '@/lib/services/cronReminderService';
 import { getFoonteConfig, getFoonteTargets, sendFoonteMessage, type FoonteSendResult } from '@/lib/services/foonteService';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DEFAULT_SYSTEM_REMINDER_SETTINGS, getSystemReminderSettings } from '@/lib/services/systemReminderSettingsService';
@@ -144,9 +144,11 @@ async function handleReminder(request: NextRequest) {
     let reportProviderFailures: ProviderFailure[] = [];
     if (dueReportSessions.length) {
       const members: CronReminderMember[] = dueReportSessions.map((session) => ({ name: session.profiles?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' }));
+      const useAutoReport = !!process.env.GEMINI_API_KEY;
+      const formatFn = useAutoReport ? formatAutoReportReminder : formatBulkReportReminder;
       const messages = adminSettings.reminder_mode === 'bulk'
-        ? [{ userIds: dueReportSessions.map(({ user_id }) => user_id), targets, message: formatBulkReportReminder(members) }]
-        : dueReportSessions.map((session, index) => ({ userIds: [session.user_id], targets, message: formatBulkReportReminder([members[index]]) }));
+        ? [{ userIds: dueReportSessions.map(({ user_id }) => user_id), targets, message: formatFn(members) }]
+        : dueReportSessions.map((session, index) => ({ userIds: [session.user_id], targets, message: formatFn([members[index]]) }));
       const sendOutcomes: { userIds: string[]; targets: string[]; results: FoonteSendResult[] }[] = [];
       for (const item of messages) sendOutcomes.push({ userIds: item.userIds, targets: item.targets, results: await sendToTargets(item.message, item.targets, foonte) });
       reportProviderFailures = sendOutcomes.flatMap((outcome) => outcome.results.filter((result) => !result.ok).map(summarizeProviderFailure));

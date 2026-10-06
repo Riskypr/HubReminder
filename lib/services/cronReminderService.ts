@@ -47,6 +47,36 @@ export function formatBulkReportReminder(members: Pick<CronReminderMember, 'name
   ].join('\n');
 }
 
+/**
+ * Format pesan reminder interaktif yang meminta user balas dengan kegiatan.
+ * Laporan akan di-generate otomatis oleh Gemini AI dan disubmit ke MagangHub.
+ */
+export function formatAutoReportReminder(members: Pick<CronReminderMember, 'name'>[], now = new Date()): string {
+  const jakartaNow = toZonedTime(now, 'Asia/Jakarta');
+  return [
+    '*[REMINDER PENGISIAN LAPORAN MAGANGHUB]*',
+    `Hari: ${format(jakartaNow, 'EEEE', { locale: id })}`,
+    `Tanggal: ${format(jakartaNow, 'd MMMM yyyy', { locale: id })}`,
+    `Jam: ${format(jakartaNow, "HH.mm 'WIB'")}`,
+    '',
+    ...members.map((member) => `${member.name} - belum mengisi laporan`),
+    '',
+    '🤖 *FITUR AUTO-LAPORAN AI*',
+    'Balas pesan ini dengan kegiatan magang kamu hari ini, contoh:',
+    '_"hari ini belajar react dan bikin komponen dashboard"_',
+    '',
+    'Bot akan otomatis:',
+    '1. Generate laporan lengkap menggunakan AI',
+    '2. Submit ke MagangHub',
+    '3. Kirim konfirmasi ke kamu',
+    '',
+    '⚠️ Belum terhubung? Balas: *link [nama lengkap kamu]*',
+    '',
+    'Atau isi manual di:',
+    'https://monev.maganghub.kemnaker.go.id/dashboard',
+  ].join('\n');
+}
+
 export function formatCookieWarningMessage(members: { name: string; expiringSoon: boolean }[], hubUrl: string): string {
   const appUrl = hubUrl.replace(/\/$/, '');
   return [
