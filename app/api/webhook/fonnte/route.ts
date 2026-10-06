@@ -51,10 +51,10 @@ async function replyToUser(phone: string, message: string) {
  * 1. Cek tabel wa_phone_mappings (sudah pernah di-link)
  * 2. Cari user dengan nama mirip dari pesan (fallback)
  */
-async function findUserByPhone(phone: string, fonnteName?: string) {
+async function findUserByPhone(phone: string) {
   const supabase = createAdminClient();
 
-  // 1. Cek mapping yang sudah ada
+  // Hanya periksa mapping resmi di wa_phone_mappings (telah melakukan koneksi/link)
   const { data: mapping, error } = await supabase
     .from('wa_phone_mappings')
     .select('user_id')
@@ -66,45 +66,6 @@ async function findUserByPhone(phone: string, fonnteName?: string) {
   }
 
   if (mapping) return mapping.user_id;
-
-  // 2. Auto-link jika nama kontak dari Fonnte cocok dengan nama profil
-  if (fonnteName && fonnteName.trim().length >= 2) {
-    const searchName = fonnteName.trim().toLowerCase();
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .not('full_name', 'is', null);
-
-    if (profiles?.length) {
-      const match = profiles.find((p) => {
-        const dbName = (p.full_name || '').toLowerCase();
-        return dbName === searchName || dbName.includes(searchName) || searchName.includes(dbName);
-      });
-
-      if (match) {
-        console.log(`[webhook/fonnte] Auto-linking phone ${phone} to user ${match.full_name} (${match.id}) via Fonnte contact name "${fonnteName}"`);
-        await supabase
-          .from('wa_phone_mappings')
-          .upsert({ user_id: match.id, phone_number: phone, linked_at: new Date().toISOString() }, { onConflict: 'phone_number' });
-        return match.id;
-      }
-    }
-  }
-
-  // 3. Fallback: Jika hanya ada 1 profil terdaftar di database, auto-link langsung
-  const { data: singleProfiles } = await supabase
-    .from('profiles')
-    .select('id, full_name')
-    .not('full_name', 'is', null);
-
-  if (singleProfiles && singleProfiles.length === 1) {
-    const user = singleProfiles[0];
-    console.log(`[webhook/fonnte] Auto-linking single registered user ${user.full_name} (${user.id}) to phone ${phone}`);
-    await supabase
-      .from('wa_phone_mappings')
-      .upsert({ user_id: user.id, phone_number: phone, linked_at: new Date().toISOString() }, { onConflict: 'phone_number' });
-    return user.id;
-  }
 
   return null;
 }
@@ -248,11 +209,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, action: 'link' });
   }
 
-    const fonnteContactName = typeof payload.name === 'string' ? payload.name : undefined;
-
-    // === COMMAND: status — cek status laporan hari ini ===
-    if (/^status$/i.test(message)) {
-      const userId = await findUserByPhone(phone, fonnteContactName);
+  // === COMMAND: status — cek status laporan hari ini ===
+  if (/^status$/i.test(message)) {
+    const userId = await findUserByPhone(phone);
     if (!userId) {
       await replyToUser(phone, '⚠️ Nomor WA kamu belum terhubung.\nBalas: link [nama lengkap kamu]');
       return NextResponse.json({ ok: true, action: 'status_unlinked' });
@@ -277,22 +236,11 @@ export async function POST(request: NextRequest) {
   }
 
   // === MAIN: Auto-generate laporan dari input kegiatan ===
-  const userId = await findUserByPhone(phone, fonnteContactName);
+  const userId = await findUserByPhone(phone);
   if (!userId) {
-    const isLikelyBotMessage = /^link\b/i.test(message) ||
-      /^status$/i.test(message) ||
-      /\b(laporan|magang|absen|kehadiran)\b/i.test(message);
-
-    if (isGroup && !isLikelyBotMessage) {
-      // Abaikan percakapan umum di grup dari member yang belum terhubung agar tidak membanjiri grup
-      return NextResponse.json({ ok: true, skipped: 'unlinked_group_chat' });
-    }
-
-    await replyToUser(
-      phone,
-      '👋 Hai! Untuk menggunakan fitur auto-laporan, hubungkan nomor WA kamu dulu.\n\nBalas: *link [nama lengkap kamu]*\n\nContoh: link Risky Prasetyo',
-    );
-    return NextResponse.json({ ok: true, action: 'unlinked' });
+    // Abaikan pesan biasa dari nomor yang belum terhubung/koneksi agar tidak mengganggu/kirim spam
+    console.log(`[webhook/fonnte] Mengabaikan pesan dari nomor belum terhubung (${phone})`);
+    return NextResponse.json({ ok: true, skipped: 'unlinked_user_ignored' });
   }
 
   const supabase = createAdminClient();
