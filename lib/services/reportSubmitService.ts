@@ -1,9 +1,12 @@
 // lib/services/reportSubmitService.ts
 // Submit laporan harian ke MagangHub API.
 // Menggunakan token sesi user yang sudah terenkripsi di database.
+//
+// Endpoint & payload ditemukan dari analisis bundle Nuxt MagangHub:
+//   - 3YmPw1vT2.js: composable createAttendance → POST /attendances/with-daily-log
+//   - D7WPuNJR2.js: form submit → { date, status, activity_log, lesson_learned, obstacles }
 
 import { extractAuthInfo } from '@/lib/services/maganghubService';
-import { updateSessionTokens } from '@/lib/services/accountService';
 import type { GeneratedReport } from '@/lib/services/geminiService';
 
 const MAGANGHUB_API_BASE = 'https://monev-api.maganghub.kemnaker.go.id/api/v1';
@@ -16,14 +19,26 @@ export interface SubmitResult {
   isSessionExpired?: boolean;
 }
 
+/** Tanggal hari ini di WIB (YYYY-MM-DD) */
+function todayWIB(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 /**
  * Submit laporan harian ke MagangHub.
- * Endpoint: POST /api/v1/attendances (atau /api/v1/attendances/store)
+ * Endpoint: POST /api/v1/attendances/with-daily-log
  *
- * Body yang dikirim mengikuti format form MagangHub:
- * - activity: uraian aktivitas
- * - lesson: pelajaran yang diperoleh
- * - challenge: kendala yang dialami
+ * Body yang dikirim mengikuti format form MagangHub (Nuxt frontend):
+ * - date:           tanggal laporan (YYYY-MM-DD, WIB)
+ * - status:         status kehadiran ("PRESENT")
+ * - activity_log:   uraian aktivitas
+ * - lesson_learned: pelajaran yang diperoleh
+ * - obstacles:      kendala yang dialami
  */
 export async function submitReportToMagangHub(
   cookiePlaintext: string,
@@ -45,10 +60,13 @@ export async function submitReportToMagangHub(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   });
 
+  // Payload sesuai format yang digunakan oleh frontend MagangHub
   const body = JSON.stringify({
-    activity: report.activity,
-    lesson: report.lesson,
-    challenge: report.challenge,
+    date: todayWIB(),
+    status: 'PRESENT',
+    activity_log: report.activity,
+    lesson_learned: report.lesson,
+    obstacles: report.challenge,
   });
 
   const controller = new AbortController();
@@ -57,11 +75,10 @@ export async function submitReportToMagangHub(
   let currentToken = bearerToken;
 
   try {
-    // Coba beberapa kemungkinan endpoint submit
+    // Endpoint utama sesuai analisis bundle Nuxt MagangHub (3YmPw1vT2.js)
     const endpoints = [
+      '/attendances/with-daily-log',
       '/attendances',
-      '/attendances/store',
-      '/users/me/attendances',
     ];
 
     for (const endpoint of endpoints) {
