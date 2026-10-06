@@ -34,7 +34,8 @@ function jakartaSeconds(date: Date) {
 function isGlobalReminderDue(now: Date, startTime: string, intervalSeconds: number) {
   const [hour, minute] = startTime.split(':').map(Number);
   const elapsed = jakartaSeconds(now) - (hour * 3600 + minute * 60);
-  return elapsed >= 0 && elapsed % intervalSeconds < 60;
+  // cron-job.org runs once per minute; allow a little execution delay around the scheduled minute.
+  return elapsed >= 0 && elapsed % intervalSeconds < 120;
 }
 
 function localDate(date: Date, timezone: string) {
@@ -120,7 +121,10 @@ async function handleReminder(request: NextRequest) {
       if (settings.snooze_until === today) return false;
       const todayLogs = notificationRows.filter((log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today);
       if (todayLogs.length >= settings.max_reminders_per_day) return false;
-      const latestLog = todayLogs.reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
+      const scheduleUpdatedAt = adminSettings.updated_at ? Date.parse(adminSettings.updated_at) : 0;
+      const latestLog = todayLogs
+        .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
+        .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
       return !latestLog || now.getTime() - latestLog >= adminSettings.interval_seconds * 1000;
     }) : [];
 
