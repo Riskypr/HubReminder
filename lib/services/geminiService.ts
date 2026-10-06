@@ -30,7 +30,10 @@ export async function generateReport(
   },
 ): Promise<{ report?: GeneratedReport; error?: string }> {
   const apiKey = getApiKey();
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const configuredModel = process.env.GEMINI_MODEL;
+  const candidateModels = Array.from(
+    new Set([configuredModel, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'].filter(Boolean)),
+  ) as string[];
 
   const profileContext = [
     profile.name ? `Nama: ${profile.name}` : null,
@@ -61,66 +64,71 @@ PENTING:
 - Buat relevan dengan input peserta dan profilnya.
 - Jangan mengada-ada kegiatan yang tidak disebutkan.`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let lastError = 'Gagal menghubungi Gemini API';
 
-  try {
-    const response = await fetch(
-      `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-            responseMimeType: 'application/json',
-          },
-        }),
-        signal: controller.signal,
-      },
-    );
+  for (const model of candidateModels) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      console.error('[gemini] API error:', response.status, errorBody.slice(0, 500));
-      return { error: `Gemini API merespon HTTP ${response.status}` };
+    try {
+      const response = await fetch(
+        `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 1024,
+              responseMimeType: 'application/json',
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        console.error(`[gemini] API error (${model}):`, response.status, errorBody.slice(0, 500));
+        lastError = `Gemini API (${model}) merespon HTTP ${response.status}`;
+        // Jika 404 (model tidak ditemukan), coba model berikutnya
+        if (response.status === 404) continue;
+        return { error: lastError };
+      }
+
+      const json = await response.json();
+      const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        console.error(`[gemini] Empty response (${model}):`, JSON.stringify(json).slice(0, 500));
+        return { error: 'Gemini tidak menghasilkan respons' };
+      }
+
+      // Parse JSON dari respons Gemini
+      const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      const parsed = JSON.parse(cleaned) as GeneratedReport;
+
+      // Validasi minimal
+      if (!parsed.activity || !parsed.lesson || !parsed.challenge) {
+        return { error: 'Respons Gemini tidak lengkap (activity/lesson/challenge kosong)' };
+      }
+
+      return { report: parsed };
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        return { error: 'Gagal mem-parse respons JSON dari Gemini' };
+      }
+      const error = err as Error;
+      if (error.name === 'AbortError') {
+        return { error: 'Timeout saat menghubungi Gemini AI (30s)' };
+      }
+      console.error(`[gemini] Exception (${model}):`, error.message);
+      lastError = `Gagal generate laporan: ${error.message}`;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const json = await response.json();
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) {
-      console.error('[gemini] Empty response:', JSON.stringify(json).slice(0, 500));
-      return { error: 'Gemini tidak menghasilkan respons' };
-    }
-
-    // Parse JSON dari respons Gemini
-    const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned) as GeneratedReport;
-
-    // Validasi minimal
-    if (!parsed.activity || !parsed.lesson || !parsed.challenge) {
-      return { error: 'Respons Gemini tidak lengkap (activity/lesson/challenge kosong)' };
-    }
-
-    if (parsed.activity.length < 80 || parsed.lesson.length < 80 || parsed.challenge.length < 80) {
-      console.warn('[gemini] Short response, will pad if needed');
-    }
-
-    return { report: parsed };
-  } catch (err) {
-    clearTimeout(timeout);
-    if (err instanceof SyntaxError) {
-      return { error: 'Gagal mem-parse respons JSON dari Gemini' };
-    }
-    const error = err as Error;
-    if (error.name === 'AbortError') {
-      return { error: 'Timeout saat menghubungi Gemini AI (30s)' };
-    }
-    console.error('[gemini] Exception:', error.message);
-    return { error: `Gagal generate laporan: ${error.message}` };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  return { error: lastError };
+
 }
