@@ -5,6 +5,9 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Fixed**: Webhook Fonnte membaca format nomor WhatsApp/JID dengan benar, memakai `member` untuk pengirim pesan grup dan `text` sebagai fallback balasan tombol; perintah `link` diparsing konsisten.
+- **Changed**: Error pencarian profil dan kegagalan kirim balasan Fonnte kini dicatat lebih jelas di log server agar proses link yang gagal dapat dibedakan dari webhook yang tidak diterima.
+- **Added**: Unit test untuk parsing payload Fonnte, normalisasi nomor, pesan grup, dan perintah link.
 - **Fixed**: Mode Bulk kini menyertakan semua peserta dengan sesi valid dan status terbaru `belum_lapor`; snooze, kuota, dan toggle reminder personal hanya membatasi mode Single. Interval global admin tetap mencegah pengiriman Bulk berulang.
 - **Fixed**: Perubahan jadwal admin mengatur ulang jeda cooldown dari log lama agar waktu mulai baru dapat berlaku; batas maksimum pengiriman harian tetap dihitung. Toleransi pemanggilan cron diperlebar untuk mengantisipasi keterlambatan kecil.
 - **Changed**: Template reminder laporan WhatsApp menampilkan judul reminder, hari, tanggal, dan jam pengiriman dalam zona waktu WIB.

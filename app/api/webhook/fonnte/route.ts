@@ -9,19 +9,12 @@ import { generateReport } from '@/lib/services/geminiService';
 import { submitReportToMagangHub } from '@/lib/services/reportSubmitService';
 import { updateSessionTokens } from '@/lib/services/accountService';
 import { getFoonteConfig, sendFoonteMessage } from '@/lib/services/foonteService';
+import { parseFoonteIncomingMessage, parseLinkCommand } from '@/lib/services/fonnteWebhookUtils';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 // Fonnte mengirim webhook agak besar; timeout perlu cukup longgar.
 export const maxDuration = 60;
-
-/** Normalize nomor WA: strip +, leading 0, dsb → format 62xxxx */
-function normalizePhone(raw: string): string {
-  let phone = raw.replace(/[^0-9]/g, '');
-  if (phone.startsWith('0')) phone = '62' + phone.slice(1);
-  if (!phone.startsWith('62')) phone = '62' + phone;
-  return phone;
-}
 
 /** Tanggal hari ini di WIB */
 function todayWIB(): string {
@@ -37,9 +30,18 @@ function todayWIB(): string {
 async function replyToUser(phone: string, message: string) {
   try {
     const config = getFoonteConfig();
-    await sendFoonteMessage(message, config, fetch, phone);
+    const result = await sendFoonteMessage(message, config, fetch, phone);
+    if (!result.ok) {
+      console.error('[webhook/fonnte] Fonnte menolak balasan:', {
+        phone,
+        status: result.status,
+        response: result.responseBody,
+      });
+    }
+    return result.ok;
   } catch (err) {
     console.error('[webhook/fonnte] Gagal kirim balasan:', err);
+    return false;
   }
 }
 
@@ -53,11 +55,16 @@ async function findUserByPhone(phone: string) {
   const supabase = createAdminClient();
 
   // 1. Cek mapping yang sudah ada
-  const { data: mapping } = await supabase
+  const { data: mapping, error } = await supabase
     .from('wa_phone_mappings')
     .select('user_id')
     .eq('phone_number', phone)
     .maybeSingle();
+
+  if (error) {
+    console.error('[webhook/fonnte] Gagal mencari mapping nomor:', error);
+    return null;
+  }
 
   if (mapping) return mapping.user_id;
 
@@ -77,10 +84,15 @@ async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
   const searchName = nameInput.trim().toLowerCase();
 
   // Cari profil dengan nama mirip
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profileError } = await supabase
     .from('profiles')
     .select('id, full_name')
     .not('full_name', 'is', null);
+
+  if (profileError) {
+    console.error('[webhook/fonnte] Gagal mencari profil untuk proses link:', profileError);
+    return { error: 'Gagal memeriksa profil HubReminder. Coba lagi beberapa saat.' };
+  }
 
   if (!profiles?.length) return { error: 'Belum ada peserta yang terdaftar di HubReminder.' };
 
@@ -118,34 +130,77 @@ async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
   return { userId: match.id, userName: match.full_name || nameInput };
 }
 
-export async function POST(request: NextRequest) {
-  let payload: Record<string, unknown>;
+export async function GET() {
+  return NextResponse.json({
+    status: 'online',
+    service: 'HubReminder Fonnte Webhook',
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/** Robustly extract payload from JSON, FormData, or URL-encoded request body */
+async function extractPayload(request: NextRequest): Promise<Record<string, unknown>> {
+  const contentType = (request.headers.get('content-type') || '').toLowerCase();
+
+  // 1. Try JSON if content-type matches
+  if (contentType.includes('application/json')) {
+    try {
+      return await request.json();
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Try FormData (handles application/x-www-form-urlencoded & multipart/form-data)
   try {
-    payload = await request.json();
+    const formData = await request.formData();
+    const result: Record<string, unknown> = {};
+    formData.forEach((value, key) => {
+      result[key] = value;
+    });
+    if (Object.keys(result).length > 0) return result;
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    // fallback
   }
 
-  // Fonnte webhook payload:
-  // { "sender": "628xxx", "message": "...", "name": "...", "member": "628xxx" (if group), ... }
-  const senderRaw = (payload.sender ?? payload.member ?? '') as string;
-  const message = ((payload.message ?? '') as string).trim();
-  const isGroup = Boolean(payload.isGroup || (payload.sender as string)?.includes('@g.us'));
-
-  // Abaikan pesan kosong
-  if (!message || !senderRaw) {
-    return NextResponse.json({ ok: true, skipped: 'empty_message' });
+  // 3. Try URLSearchParams / plain text parsing
+  try {
+    const text = await request.text();
+    if (text) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        const params = new URLSearchParams(text);
+        const result: Record<string, unknown> = {};
+        params.forEach((value, key) => {
+          result[key] = value;
+        });
+        if (Object.keys(result).length > 0) return result;
+      }
+    }
+  } catch {
+    // fallback
   }
 
-  // Untuk pesan grup, sender adalah nomor anggota yang mengirim
-  const phone = normalizePhone(isGroup ? (payload.member as string || senderRaw) : senderRaw);
+  return {};
+}
 
-  console.log('[webhook/fonnte] Incoming:', { phone, message: message.slice(0, 100), isGroup });
+export async function POST(request: NextRequest) {
+  const payload = await extractPayload(request);
+  console.log('[webhook/fonnte] Incoming payload:', JSON.stringify(payload));
+
+  const incoming = parseFoonteIncomingMessage(payload);
+  if (!incoming) {
+    console.log('[webhook/fonnte] Message skipped (invalid payload or empty content)');
+    return NextResponse.json({ ok: true, skipped: 'empty_or_invalid_message' });
+  }
+  const { phone, message, isGroup } = incoming;
+
+  console.log('[webhook/fonnte] Parsed incoming:', { phone, message: message.slice(0, 100), isGroup });
 
   // === COMMAND: link [nama] — link nomor WA ke akun HubReminder ===
-  const linkMatch = message.match(/^link\s+(.+)/i);
-  if (linkMatch) {
-    const nameInput = linkMatch[1].trim();
+  const nameInput = parseLinkCommand(message);
+  if (nameInput) {
     const result = await linkPhoneToUser(phone, nameInput);
     if (result.error) {
       await replyToUser(phone, result.error);
@@ -184,6 +239,15 @@ export async function POST(request: NextRequest) {
   // === MAIN: Auto-generate laporan dari input kegiatan ===
   const userId = await findUserByPhone(phone);
   if (!userId) {
+    const isLikelyBotMessage = /^link\b/i.test(message) ||
+      /^status$/i.test(message) ||
+      /\b(laporan|magang|absen|kehadiran)\b/i.test(message);
+
+    if (isGroup && !isLikelyBotMessage) {
+      // Abaikan percakapan umum di grup dari member yang belum terhubung agar tidak membanjiri grup
+      return NextResponse.json({ ok: true, skipped: 'unlinked_group_chat' });
+    }
+
     await replyToUser(
       phone,
       '👋 Hai! Untuk menggunakan fitur auto-laporan, hubungkan nomor WA kamu dulu.\n\nBalas: *link [nama lengkap kamu]*\n\nContoh: link Risky Prasetyo',

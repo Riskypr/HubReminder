@@ -10,6 +10,7 @@ describe('evaluateReminder()', () => {
     interval_minutes: 60,
     active_start_time: '08:00',
     active_end_time: '20:00',
+    reminder_times: ['08:00', '10:00', '12:00', '14:00'],
     snooze_until: null,
     updated_at: new Date().toISOString(),
   };
@@ -46,7 +47,7 @@ describe('evaluateReminder()', () => {
       timezone: 'Asia/Makassar',
     });
     expect(res.shouldSend).toBe(false);
-    expect(res.reason).toBe('outside_active_hours');
+    expect(res.reason).toBe('outside_reminder_schedule');
   });
 
   it('harus menolak kirim reminder jika kuota harian telah habis', () => {
@@ -55,7 +56,7 @@ describe('evaluateReminder()', () => {
       { id: '2', user_id: 'u1', sent_at: '2026-10-01T10:00:00Z', status_at_send: 'belum_lapor', sequence_today: 2 },
       { id: '3', user_id: 'u1', sent_at: '2026-10-01T12:00:00Z', status_at_send: 'belum_lapor', sequence_today: 3 },
     ];
-    const afternoon = new Date('2026-10-01T14:00:00+08:00');
+    const afternoon = new Date('2026-10-01T14:05:00+08:00');
 
     const res = evaluateReminder({
       settings: baseSettings, // max_reminders_per_day = 3
@@ -69,8 +70,8 @@ describe('evaluateReminder()', () => {
 
   it('harus menolak kirim reminder jika interval jeda belum terpenuhi', () => {
     // Terakhir kirim 15 menit yang lalu (padahal interval_minutes = 60)
-    const lastSent = new Date('2026-10-01T10:00:00Z');
-    const now = new Date('2026-10-01T10:15:00Z');
+    const lastSent = new Date('2026-10-01T10:00:00+08:00');
+    const now = new Date('2026-10-01T10:15:00+08:00');
 
     const mockLogs: NotificationLog[] = [
       { id: '1', user_id: 'u1', sent_at: lastSent.toISOString(), status_at_send: 'belum_lapor', sequence_today: 1 },
@@ -87,9 +88,9 @@ describe('evaluateReminder()', () => {
   });
 
   it('harus mengizinkan pengiriman reminder jika semua kondisi terpenuhi', () => {
-    // Terakhir kirim 90 menit yang lalu (interval_minutes = 60) dan dalam jam aktif (11:30)
-    const lastSent = new Date('2026-10-01T02:00:00Z'); // 10:00 WITA
-    const now = new Date('2026-10-01T03:30:00Z');      // 11:30 WITA
+    // Terakhir kirim 120 menit yang lalu (interval_minutes = 60) dan dalam jam aktif (10:05 WITA)
+    const lastSent = new Date('2026-10-01T08:00:00+08:00');
+    const now = new Date('2026-10-01T10:05:00+08:00');
 
     const mockLogs: NotificationLog[] = [
       { id: '1', user_id: 'u1', sent_at: lastSent.toISOString(), status_at_send: 'belum_lapor', sequence_today: 1 },
