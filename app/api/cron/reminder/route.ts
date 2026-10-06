@@ -113,20 +113,32 @@ async function handleReminder(request: NextRequest) {
     const notificationRows = (notificationData ?? []) as NotificationRow[];
     const cookieLogs = (cookieLogData ?? []) as CookieLogRow[];
 
-    const dueReportSessions = globalDue ? eligibleSessions.filter((session) => {
-      const settings = settingsByUser.get(session.user_id);
-      if (!settings?.enabled || latestStatusByUser.get(session.user_id) !== 'belum_lapor') return false;
-      const timezone = session.profiles?.timezone || 'Asia/Jakarta';
-      const today = localDate(now, timezone);
-      if (settings.snooze_until === today) return false;
-      const todayLogs = notificationRows.filter((log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today);
-      if (todayLogs.length >= settings.max_reminders_per_day) return false;
-      const scheduleUpdatedAt = adminSettings.updated_at ? Date.parse(adminSettings.updated_at) : 0;
-      const latestLog = todayLogs
-        .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
-        .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
-      return !latestLog || now.getTime() - latestLog >= adminSettings.interval_seconds * 1000;
-    }) : [];
+    const unreportedSessions = eligibleSessions.filter((session) => latestStatusByUser.get(session.user_id) === 'belum_lapor');
+    const scheduleUpdatedAt = adminSettings.updated_at ? Date.parse(adminSettings.updated_at) : 0;
+    const lastReminderAfterScheduleChange = notificationRows
+      .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
+      .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
+    const bulkIntervalElapsed = !lastReminderAfterScheduleChange ||
+      now.getTime() - lastReminderAfterScheduleChange >= adminSettings.interval_seconds * 1000;
+
+    const dueReportSessions = !globalDue ? [] : adminSettings.reminder_mode === 'bulk'
+      // Bulk follows the admin's global schedule and includes every connected participant
+      // whose latest attendance status is still unreported, regardless of personal snooze/quota.
+      ? (bulkIntervalElapsed ? unreportedSessions : [])
+      // Single mode preserves each participant's existing reminder preferences and limits.
+      : unreportedSessions.filter((session) => {
+        const settings = settingsByUser.get(session.user_id);
+        if (!settings?.enabled) return false;
+        const timezone = session.profiles?.timezone || 'Asia/Jakarta';
+        const today = localDate(now, timezone);
+        if (settings.snooze_until === today) return false;
+        const todayLogs = notificationRows.filter((log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today);
+        if (todayLogs.length >= settings.max_reminders_per_day) return false;
+        const latestLog = todayLogs
+          .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
+          .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
+        return !latestLog || now.getTime() - latestLog >= adminSettings.interval_seconds * 1000;
+      });
 
     let reportSent = false;
     let reportProviderFailures: ProviderFailure[] = [];
@@ -200,7 +212,7 @@ async function handleReminder(request: NextRequest) {
       }
     }
 
-    const sessionsStillUnreported = eligibleSessions.filter((session) => latestStatusByUser.get(session.user_id) === 'belum_lapor').length;
+    const sessionsStillUnreported = unreportedSessions.length;
     const reason = reportSent || cookieWarningsSent > 0
       ? undefined
       : !globalDue && sessionsStillUnreported > 0
@@ -208,7 +220,7 @@ async function handleReminder(request: NextRequest) {
         : sessionsStillUnreported === 0 && warningSessions.length === 0
           ? 'no_unreported_or_cookie_warning_sessions'
           : 'participants_blocked_by_settings_or_interval';
-    return NextResponse.json({ success: true, sent: reportSent || cookieWarningsSent > 0, reason, reportSent, cookieWarningsSent, reportProviderFailures, cookieProviderFailures, reminderMode: adminSettings.reminder_mode, globalReminderDue: globalDue, startTime: adminSettings.start_time, intervalSeconds: adminSettings.interval_seconds, activeSessions: eligibleSessions.length, sessionsWithAttendanceCheck: latestStatusByUser.size, sessionsStillUnreported });
+    return NextResponse.json({ success: true, sent: reportSent || cookieWarningsSent > 0, reason, reportSent, reportMemberCount: dueReportSessions.length, cookieWarningsSent, reportProviderFailures, cookieProviderFailures, reminderMode: adminSettings.reminder_mode, globalReminderDue: globalDue, startTime: adminSettings.start_time, intervalSeconds: adminSettings.interval_seconds, activeSessions: eligibleSessions.length, sessionsWithAttendanceCheck: latestStatusByUser.size, sessionsStillUnreported });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
     return NextResponse.json({ error: 'Gagal menjalankan reminder', detail: error instanceof Error ? error.message : 'Kesalahan tidak diketahui' }, { status: 500 });

@@ -5,6 +5,7 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Fixed**: Mode Bulk kini menyertakan semua peserta dengan sesi valid dan status terbaru `belum_lapor`; snooze, kuota, dan toggle reminder personal hanya membatasi mode Single. Interval global admin tetap mencegah pengiriman Bulk berulang.
 - **Fixed**: Perubahan jadwal admin mengatur ulang jeda cooldown dari log lama agar waktu mulai baru dapat berlaku; batas maksimum pengiriman harian tetap dihitung. Toleransi pemanggilan cron diperlebar untuk mengantisipasi keterlambatan kecil.
 - **Changed**: Template reminder laporan WhatsApp menampilkan judul reminder, hari, tanggal, dan jam pengiriman dalam zona waktu WIB.
 - **Added**: Panel admin reminder berbasis allowlist `REMINDER_ADMIN_EMAILS` untuk memilih mode Single/Bulk, jam mulai WIB, interval, jumlah pengulangan warning cookie, dan jeda warning; migration `20261006000001_flexible_reminder_settings.sql` membuat tabel konfigurasi sistem dan log warning.
@@ -12,7 +13,7 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 - **Added**: Cron mengirim daftar peserta belum mengisi laporan, mendeteksi sesi berstatus expired dan access token JWT yang akan kedaluwarsa dalam tiga hari, membatasi warning per sesi, dan menyertakan tautan HubReminder HTTPS.
 - **Changed**: Jadwal pengiriman WhatsApp menggunakan jam mulai dan interval global admin; pengaturan kuota harian dan snooze per pengguna tetap berlaku.
 - **Changed**: Input nomor peserta dan target nomor/ID grup di UI dihapus; cron tidak membaca target dari database. Single mengirim pesan terpisah per peserta ke target environment Foonte yang sama; Bulk mengirim daftar ke target tersebut.
-- **Changed**: Respons cron sekarang menyertakan alasan saat tidak ada pesan jatuh tempo dan ringkasan kode kegagalan Foonte tanpa mengembalikan body provider yang dapat memuat data target/pesan.
+- **Changed**: Respons cron sekarang menyertakan alasan saat tidak ada pesan jatuh tempo, jumlah peserta dalam pesan, dan ringkasan kode kegagalan Foonte tanpa mengembalikan body provider yang dapat memuat data target/pesan.
 - **Changed**: Pengiriman multi-target dibatasi lima request serentak untuk menjaga tempo pengiriman WhatsApp.
 - **Notes for Next Agent**: Terapkan migration baru di Supabase dan set `REMINDER_ADMIN_EMAILS` di deployment. Target dibaca dari `FOONTE_WA_GROUP_ID`; `FOONTE_WA_TARGETS` opsional untuk beberapa nomor/ID grup. Peringatan “mau habis” hanya dapat dihitung saat access token memuat klaim JWT `exp`; sesi tanpa klaim tersebut diperingatkan setelah statusnya expired.
 - **Changed**: Template reminder WhatsApp menyertakan URL dashboard Monev dalam bentuk tautan langsung yang bisa diketuk untuk mengisi absensi.
