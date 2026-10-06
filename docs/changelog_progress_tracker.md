@@ -5,6 +5,7 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Changed**: Template reminder laporan WhatsApp menampilkan judul reminder, hari, tanggal, dan jam pengiriman dalam zona waktu WIB.
 - **Added**: Panel admin reminder berbasis allowlist `REMINDER_ADMIN_EMAILS` untuk memilih mode Single/Bulk, jam mulai WIB, interval, jumlah pengulangan warning cookie, dan jeda warning; migration `20261006000001_flexible_reminder_settings.sql` membuat tabel konfigurasi sistem dan log warning.
 - **Added**: Mode Single mengirim pesan terpisah per peserta ke target Foonte; mode Bulk mengirim daftar peserta dalam satu pesan ke target Foonte. Target tidak diinput di aplikasi.
 - **Added**: Cron mengirim daftar peserta belum mengisi laporan, mendeteksi sesi berstatus expired dan access token JWT yang akan kedaluwarsa dalam tiga hari, membatasi warning per sesi, dan menyertakan tautan HubReminder HTTPS.

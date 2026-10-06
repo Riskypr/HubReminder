@@ -32,8 +32,14 @@ export function formatCronReminderMessage(members: CronReminderMember[], now = n
   ].join('\n');
 }
 
-export function formatBulkReportReminder(members: Pick<CronReminderMember, 'name'>[]): string {
+export function formatBulkReportReminder(members: Pick<CronReminderMember, 'name'>[], now = new Date()): string {
+  const jakartaNow = toZonedTime(now, 'Asia/Jakarta');
   return [
+    '*[REMINDER PENGISIAN LAPORAN MAGANGHUB]*',
+    `Hari: ${format(jakartaNow, 'EEEE', { locale: id })}`,
+    `Tanggal: ${format(jakartaNow, 'd MMMM yyyy', { locale: id })}`,
+    `Jam: ${format(jakartaNow, "HH.mm 'WIB'")}`,
+    '',
     ...members.map((member) => `${member.name} - belum mengisi laporan`),
     '',
     'Silahkan mengisi laporan anda sekarang di link monev maganghub:',
