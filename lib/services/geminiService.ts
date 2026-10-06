@@ -65,7 +65,7 @@ export async function generateReport(
   const apiKey = getApiKey();
   const configuredModel = process.env.GEMINI_MODEL;
   const candidateModels = Array.from(
-    new Set([configuredModel, 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'].filter(Boolean)),
+    new Set([configuredModel, 'gemini-3.5-flash-lite', 'gemini-3.8-flash'].filter(Boolean)),
   ) as string[];
 
   const profileContext = [
