@@ -5,6 +5,14 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Added**: Panel admin reminder berbasis allowlist `REMINDER_ADMIN_EMAILS` untuk memilih mode Single/Bulk, jam mulai WIB, interval, jumlah pengulangan warning cookie, dan jeda warning; migration `20261006000001_flexible_reminder_settings.sql` membuat tabel konfigurasi sistem dan log warning.
+- **Added**: Mode Single mengirim pesan terpisah per peserta ke target Foonte; mode Bulk mengirim daftar peserta dalam satu pesan ke target Foonte. Target tidak diinput di aplikasi.
+- **Added**: Cron mengirim daftar peserta belum mengisi laporan, mendeteksi sesi berstatus expired dan access token JWT yang akan kedaluwarsa dalam tiga hari, membatasi warning per sesi, dan menyertakan tautan HubReminder HTTPS.
+- **Changed**: Jadwal pengiriman WhatsApp menggunakan jam mulai dan interval global admin; pengaturan kuota harian dan snooze per pengguna tetap berlaku.
+- **Changed**: Input nomor peserta dan target nomor/ID grup di UI dihapus; cron tidak membaca target dari database. Single mengirim pesan terpisah per peserta ke target environment Foonte yang sama; Bulk mengirim daftar ke target tersebut.
+- **Changed**: Respons cron sekarang menyertakan alasan saat tidak ada pesan jatuh tempo dan ringkasan kode kegagalan Foonte tanpa mengembalikan body provider yang dapat memuat data target/pesan.
+- **Changed**: Pengiriman multi-target dibatasi lima request serentak untuk menjaga tempo pengiriman WhatsApp.
+- **Notes for Next Agent**: Terapkan migration baru di Supabase dan set `REMINDER_ADMIN_EMAILS` di deployment. Target dibaca dari `FOONTE_WA_GROUP_ID`; `FOONTE_WA_TARGETS` opsional untuk beberapa nomor/ID grup. Peringatan “mau habis” hanya dapat dihitung saat access token memuat klaim JWT `exp`; sesi tanpa klaim tersebut diperingatkan setelah statusnya expired.
 - **Changed**: Template reminder WhatsApp menyertakan URL dashboard Monev dalam bentuk tautan langsung yang bisa diketuk untuk mengisi absensi.
 - **Fixed**: Pendaftaran Web Push sekarang memakai subscription Service Worker aktif, menyegarkan subscription lama bila kunci VAPID berubah, memvalidasi bentuk kunci, dan memberi langkah pemulihan untuk error layanan push browser.
 - **Changed**: Notifikasi web menampilkan tombol **Isi absensi** dan klik notifikasi membuka dashboard Monev MagangHub.

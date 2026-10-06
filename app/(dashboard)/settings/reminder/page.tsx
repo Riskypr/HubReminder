@@ -4,6 +4,9 @@ import { redirect } from 'next/navigation';
 import { getReminderSettings } from '@/lib/services/reminderSettingsService';
 import ReminderSettingsForm from '@/components/settings/ReminderSettingsForm';
 import SettingsTabs from '@/components/settings/SettingsTabs';
+import AdminReminderSettingsForm from '@/components/settings/AdminReminderSettingsForm';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getSystemReminderSettings, isReminderAdmin } from '@/lib/services/systemReminderSettingsService';
 import { BellRing, Sparkles } from 'lucide-react';
 
 export const metadata = {
@@ -22,6 +25,9 @@ export default async function ReminderSettingsPage() {
   if (!user) redirect('/login');
 
   const settings = await getReminderSettings(user.id, supabase);
+  const adminSettings = isReminderAdmin(user.email)
+    ? await getSystemReminderSettings(createAdminClient()).catch(() => null)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -48,6 +54,7 @@ export default async function ReminderSettingsPage() {
       </div>
 
       <ReminderSettingsForm initialSettings={settings} />
+      {adminSettings && <AdminReminderSettingsForm initialSettings={adminSettings} />}
     </div>
   );
 }

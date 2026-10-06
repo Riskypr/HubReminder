@@ -45,12 +45,13 @@ SESSION_ENCRYPTION_KEY=[32-KARAKTER-KUNCI-ENKRIPSI]
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=[VAPID-PUBLIC-KEY]
 VAPID_PRIVATE_KEY=[VAPID-PRIVATE-KEY]
 VAPID_SUBJECT=mailto:admin@domain.com
+REMINDER_ADMIN_EMAILS=admin@domain.com
 ```
 
 > **Tip Generate VAPID Key**: Jalankan `npx web-push generate-vapid-keys` untuk menghasilkan pasangan kunci VAPID.
 
 ### 2. Jalankan Database Migrations di Supabase
-Buka **SQL Editor** pada dashboard Supabase Anda, lalu eksekusi seluruh file di `supabase/migrations/` sesuai urutan nama file. Migration terbaru, `20261002000005_add_notification_channel.sql`, diperlukan agar riwayat reminder WhatsApp tidak dihitung sebagai riwayat notifikasi push.
+Buka **SQL Editor** pada dashboard Supabase Anda, lalu eksekusi seluruh file di `supabase/migrations/` sesuai urutan nama file. Migration `20261006000001_flexible_reminder_settings.sql` menambahkan pengaturan reminder admin, nomor WhatsApp personal, dan riwayat warning cookie.
 
 ### 3. Deploy Supabase Edge Function
 Jika menggunakan Supabase CLI:
@@ -81,4 +82,4 @@ curl -X POST https://<domain>/api/cron/reminder/configure \
   -H "X-Cron-Secret: <nilai-CRON_SECRET_KEY>"
 ```
 
-Respons berisi `jobId` untuk pengiriman reminder dan `attendanceJob.jobId` untuk pemeriksaan status. Simpan masing-masing sebagai `CRON_JOB_ORG_JOB_ID` dan `CRON_JOB_ORG_ATTENDANCE_JOB_ID` di environment Vercel, lalu jalankan konfigurasi kembali. Job pemeriksaan status memanggil `/api/cron/attendance` setiap 15 menit; job reminder memanggil `/api/cron/reminder` setiap menit. Keduanya memakai header `X-Cron-Secret`. Endpoint reminder memeriksa waktu reminder, interval, kuota harian, snooze, dan cache status laporan sebelum mengirim ringkasan peserta yang memenuhi syarat ke Foonte. Waktu reminder menggunakan presisi menit (HH:MM), mengikuti cron per menit. Pilihan interval: 15/30 menit, 1/1,5/2/3/4 jam.
+Respons berisi `jobId` untuk pengiriman reminder dan `attendanceJob.jobId` untuk pemeriksaan status. Simpan masing-masing sebagai `CRON_JOB_ORG_JOB_ID` dan `CRON_JOB_ORG_ATTENDANCE_JOB_ID` di environment Vercel, lalu jalankan konfigurasi kembali. Job pemeriksaan status memanggil `/api/cron/attendance` setiap 15 menit; job reminder memanggil `/api/cron/reminder` setiap menit. Keduanya memakai header `X-Cron-Secret`. Isi `REMINDER_ADMIN_EMAILS` dengan email akun yang boleh mengubah pengaturan global di Pengaturan > Pengingat. Admin memilih mode Single atau Bulk, jam mulai WIB, interval, jumlah pengulangan warning cookie, dan jeda warning. Pengiriman selalu memakai target Foonte dari `FOONTE_WA_GROUP_ID`; opsional, `FOONTE_WA_TARGETS` dapat berisi beberapa nomor WhatsApp atau ID grup yang dipisahkan koma. Mode Single mengirim pesan terpisah per peserta ke target Foonte yang sama, sedangkan mode Bulk mengirim daftar dalam satu pesan. Warning mendeteksi token JWT yang memiliki klaim expiry dalam tiga hari dan sesi yang telah ditandai kedaluwarsa.

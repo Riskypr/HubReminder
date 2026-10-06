@@ -111,7 +111,13 @@ Pola yang sama diterapkan ke seluruh tabel: `select`/`update` untuk pemilik bari
 ## 5. Audit Reminder Grup Foonte
 Migration `20261001000003_add_reminder_logs.sql` menambahkan tabel `reminder_logs` untuk audit pengiriman ringkasan grup WhatsApp. Kolomnya adalah `sent_at`, `status` (`sent`/`failed`), `recipient`, `member_count`, `provider_status`, dan `provider_response`. RLS aktif tanpa policy publik; hanya webhook server dengan `service_role` yang menulisnya.
 
-## 6. Perhitungan Kuota Reminder (Logika, bukan tabel baru)
+## 6. Pengaturan Reminder Global dan Warning Cookie
+
+Migration `20261006000001_flexible_reminder_settings.sql` menambahkan `system_reminder_settings` (satu baris singleton) yang hanya diakses server melalui `service_role`. Panel dan API dibatasi dengan allowlist `REMINDER_ADMIN_EMAILS`. Pengaturannya mencakup mode `single`/`bulk`, jam mulai WIB, interval, target WhatsApp grup/nomor, jumlah warning cookie, dan interval warning.
+
+`cookie_warning_logs` menyimpan hasil kirim per peserta dan per sesi; penghitung direset setelah sesi diperbarui. Warning mengidentifikasi sesi expired serta token JWT dengan expiry dalam tiga hari. Target WhatsApp dibaca server dari `FOONTE_WA_GROUP_ID` atau `FOONTE_WA_TARGETS`, bukan dari tabel database.
+
+## 7. Perhitungan Kuota Reminder (Logika, bukan tabel baru)
 Saat Edge Function berjalan, untuk menentukan apakah boleh kirim reminder baru:
 ```sql
 select count(*) as sent_today, max(sent_at) as last_sent

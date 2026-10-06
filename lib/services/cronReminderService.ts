@@ -31,3 +31,23 @@ export function formatCronReminderMessage(members: CronReminderMember[], now = n
     'https://monev.maganghub.kemnaker.go.id/dashboard',
   ].join('\n');
 }
+
+export function formatBulkReportReminder(members: Pick<CronReminderMember, 'name'>[]): string {
+  return [
+    ...members.map((member) => `${member.name} - belum mengisi laporan`),
+    '',
+    'Silahkan mengisi laporan anda sekarang di link monev maganghub:',
+    'https://monev.maganghub.kemnaker.go.id/dashboard',
+  ].join('\n');
+}
+
+export function formatCookieWarningMessage(members: { name: string; expiringSoon: boolean }[], hubUrl: string): string {
+  const appUrl = hubUrl.replace(/\/$/, '');
+  return [
+    'Daftar peserta yang masa aktif cookie-nya sudah habis / mau habis:',
+    ...members.map((member) => `- ${member.name} - session cookie ${member.expiringSoon ? 'mau habis' : 'sudah habis'}, silahkan perbarui cookie`),
+    '',
+    'Silahkan perbarui cookie anda melalui link berikut:',
+    appUrl,
+  ].join('\n');
+}
