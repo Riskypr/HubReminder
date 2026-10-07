@@ -38,6 +38,23 @@ function isGlobalReminderDue(now: Date, startTime: string, intervalSeconds: numb
   return elapsed >= 0 && elapsed % intervalSeconds < 120;
 }
 
+/**
+ * Cek apakah waktu sekarang cocok dengan salah satu reminder_times user.
+ * Digunakan di mode single agar setiap user menggunakan jadwalnya sendiri,
+ * tidak tergantung jam mulai admin (menghindari tabrakan jadwal).
+ */
+function isUserReminderTimeDue(now: Date, reminderTimes: string[], timezone: string): boolean {
+  if (!reminderTimes.length) return false;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '00';
+  const currentHHMM = `${get('hour')}:${get('minute')}`;
+  // Cron berjalan tiap menit; cocokkan dengan toleransi tepat di menit yang ditentukan.
+  return reminderTimes.some((time) => time.slice(0, 5) === currentHHMM);
+}
+
 function localDate(date: Date, timezone: string) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
@@ -121,11 +138,23 @@ async function handleReminder(request: NextRequest) {
     const bulkIntervalElapsed = !lastReminderAfterScheduleChange ||
       now.getTime() - lastReminderAfterScheduleChange >= adminSettings.interval_seconds * 1000;
 
-    const dueReportSessions = !globalDue ? [] : adminSettings.reminder_mode === 'bulk'
+    // Hitung total reminder WA yang sudah terkirim hari ini (semua user, mode apapun).
+    // Digunakan untuk melindungi kuota Foonte agar tidak jebol.
+    const todayJakarta = localDate(now, 'Asia/Jakarta');
+    const totalSentToday = notificationRows.filter(
+      (log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta,
+    ).length;
+    const adminDailyQuotaReached = totalSentToday >= adminSettings.max_reminders_per_day;
+
+    // Mode bulk: ikuti jadwal global admin (start_time + interval).
+    // Mode single: tiap user ikuti reminder_times-nya sendiri, BUKAN jadwal admin —
+    //   ini mencegah tabrakan saat admin mengatur jam yang berbeda dari jadwal user.
+    const dueReportSessions = adminDailyQuotaReached ? [] : adminSettings.reminder_mode === 'bulk'
       // Bulk follows the admin's global schedule and includes every connected participant
       // whose latest attendance status is still unreported, regardless of personal snooze/quota.
-      ? (bulkIntervalElapsed ? unreportedSessions : [])
-      // Single mode preserves each participant's existing reminder preferences and limits.
+      ? (!globalDue || !bulkIntervalElapsed ? [] : unreportedSessions)
+      // Single mode: setiap user diperiksa berdasarkan reminder_times-nya sendiri.
+      // globalDue TIDAK digunakan di sini agar jadwal user tidak tabrakan dengan jadwal admin.
       : unreportedSessions.filter((session) => {
         const settings = settingsByUser.get(session.user_id);
         if (!settings?.enabled) return false;
@@ -134,10 +163,14 @@ async function handleReminder(request: NextRequest) {
         if (settings.snooze_until === today) return false;
         const todayLogs = notificationRows.filter((log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today);
         if (todayLogs.length >= settings.max_reminders_per_day) return false;
+        // Cek apakah waktu sekarang cocok dengan salah satu reminder_times user.
+        // Tidak bergantung pada jadwal admin sehingga bebas tabrakan.
+        if (!isUserReminderTimeDue(now, settings.reminder_times ?? [], timezone)) return false;
         const latestLog = todayLogs
           .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
           .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
-        return !latestLog || now.getTime() - latestLog >= adminSettings.interval_seconds * 1000;
+        // Pastikan interval minimum terpenuhi sejak reminder terakhir.
+        return !latestLog || now.getTime() - latestLog >= (settings.interval_seconds ?? adminSettings.interval_seconds) * 1000;
       });
 
     let reportSent = false;
@@ -217,12 +250,14 @@ async function handleReminder(request: NextRequest) {
     const sessionsStillUnreported = unreportedSessions.length;
     const reason = reportSent || cookieWarningsSent > 0
       ? undefined
-      : !globalDue && sessionsStillUnreported > 0
-        ? 'global_schedule_not_due'
-        : sessionsStillUnreported === 0 && warningSessions.length === 0
-          ? 'no_unreported_or_cookie_warning_sessions'
-          : 'participants_blocked_by_settings_or_interval';
-    return NextResponse.json({ success: true, sent: reportSent || cookieWarningsSent > 0, reason, reportSent, reportMemberCount: dueReportSessions.length, cookieWarningsSent, reportProviderFailures, cookieProviderFailures, reminderMode: adminSettings.reminder_mode, globalReminderDue: globalDue, startTime: adminSettings.start_time, intervalSeconds: adminSettings.interval_seconds, activeSessions: eligibleSessions.length, sessionsWithAttendanceCheck: latestStatusByUser.size, sessionsStillUnreported });
+      : adminDailyQuotaReached
+        ? 'admin_daily_quota_reached'
+        : !globalDue && adminSettings.reminder_mode === 'bulk' && sessionsStillUnreported > 0
+          ? 'global_schedule_not_due'
+          : sessionsStillUnreported === 0 && warningSessions.length === 0
+            ? 'no_unreported_or_cookie_warning_sessions'
+            : 'participants_blocked_by_settings_or_interval';
+    return NextResponse.json({ success: true, sent: reportSent || cookieWarningsSent > 0, reason, reportSent, reportMemberCount: dueReportSessions.length, cookieWarningsSent, reportProviderFailures, cookieProviderFailures, reminderMode: adminSettings.reminder_mode, globalReminderDue: globalDue, startTime: adminSettings.start_time, intervalSeconds: adminSettings.interval_seconds, activeSessions: eligibleSessions.length, sessionsWithAttendanceCheck: latestStatusByUser.size, sessionsStillUnreported, adminDailyQuotaReached, totalSentToday, maxRemindersPerDay: adminSettings.max_reminders_per_day });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
     return NextResponse.json({ error: 'Gagal menjalankan reminder', detail: error instanceof Error ? error.message : 'Kesalahan tidak diketahui' }, { status: 500 });

@@ -29,13 +29,14 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
   return (
     <form onSubmit={submit} className="card space-y-5 border-primary/20 bg-white p-5" aria-label="Pengaturan reminder admin">
       <div>
-        <h2 className="text-base font-bold text-text-primary">Pengaturan Admin Reminder & Cookie</h2>
+        <h2 className="text-base font-bold text-text-primary">Pengaturan Admin Reminder &amp; Cookie</h2>
         <p className="mt-1 text-xs text-text-secondary">Pengaturan ini berlaku global dan hanya tersedia untuk email admin yang ada di REMINDER_ADMIN_EMAILS. Kedua mode mengirim lewat Foonte ke target dari environment.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="label">Mode reminder laporan
           <select className="input mt-2" value={settings.reminder_mode} onChange={(e) => update('reminder_mode', e.target.value as 'single' | 'bulk')}>
-            <option value="single">Single — satu pesan per peserta</option><option value="bulk">Bulk — daftar peserta dalam satu pesan</option>
+            <option value="single">Single — satu pesan per peserta</option>
+            <option value="bulk">Bulk — daftar peserta dalam satu pesan</option>
           </select>
         </label>
         <label className="label">Jam mulai (WIB)
@@ -45,6 +46,23 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
           <select className="input mt-2" value={settings.interval_seconds} onChange={(e) => update('interval_seconds', Number(e.target.value))}>
             {REMINDER_INTERVAL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+        </label>
+        <label className="label">
+          <span>
+            Batas reminder laporan per hari
+            <span className="ml-1.5 text-[11px] font-normal text-amber-600">(kuota Foonte)</span>
+          </span>
+          <input
+            className="input mt-2"
+            type="number"
+            min={1}
+            max={50}
+            value={settings.max_reminders_per_day}
+            onChange={(e) => update('max_reminders_per_day', Number(e.target.value))}
+          />
+          <span className="mt-1 block text-[11px] text-text-secondary">
+            Total pengiriman pesan reminder ke grup WA per hari (seluruh sesi). Sesuaikan dengan kuota harian Foonte Anda.
+          </span>
         </label>
         <label className="label">Batas warning cookie per sesi
           <input className="input mt-2" type="number" min={1} max={20} value={settings.cookie_warning_count} onChange={(e) => update('cookie_warning_count', Number(e.target.value))} />

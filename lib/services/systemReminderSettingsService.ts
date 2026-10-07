@@ -6,6 +6,8 @@ export interface SystemReminderSettings {
   interval_seconds: number;
   cookie_warning_count: number;
   cookie_warning_interval_minutes: number;
+  /** Batas total reminder (laporan) yang boleh dikirim admin per hari ke grup WA. Proteksi kuota Foonte. */
+  max_reminders_per_day: number;
   updated_at?: string | null;
 }
 
@@ -15,6 +17,7 @@ export const DEFAULT_SYSTEM_REMINDER_SETTINGS: SystemReminderSettings = {
   interval_seconds: 7200,
   cookie_warning_count: 3,
   cookie_warning_interval_minutes: 60,
+  max_reminders_per_day: 10,
   updated_at: null,
 };
 

@@ -12,6 +12,8 @@ const schema = z.object({
   interval_seconds: z.number().int().refine((value) => [900, 1800, 3600, 5400, 7200, 10800, 14400].includes(value)),
   cookie_warning_count: z.number().int().min(1).max(20),
   cookie_warning_interval_minutes: z.number().int().min(15).max(1440),
+  /** Batas pengiriman reminder laporan per hari (proteksi kuota Foonte). */
+  max_reminders_per_day: z.number().int().min(1).max(50),
 });
 
 async function authorized() {
