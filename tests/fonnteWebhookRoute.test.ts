@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   sendFoonteMessage: vi.fn(),
   getFoonteConfig: vi.fn(() => ({ apiToken: 'test-token', groupId: '' })),
   linkError: null as null | { message: string },
+  waBotEnabled: true,
 }));
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -16,6 +17,12 @@ vi.mock('@/lib/supabase/admin', () => ({
           data: [{ id: 'user-1', full_name: 'Risky Prasetyo' }],
           error: null,
         }) }) };
+      }
+      if (table === 'system_reminder_settings') {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({
+          data: { wa_bot_enabled: mocks.waBotEnabled },
+          error: null,
+        }) }) }) };
       }
       return { upsert: mocks.upsert };
     },
@@ -98,5 +105,20 @@ describe('POST /api/webhook/fonnte link flow', () => {
       expect.any(Function),
       '6281234567890',
     );
+  });
+
+  it('skips processing incoming messages when wa_bot_enabled is false', async () => {
+    mocks.waBotEnabled = false;
+    const request = new Request('http://localhost/api/webhook/fonnte', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sender: '081234567890', message: 'link Risky Prasetyo' }),
+    });
+
+    const response = await POST(request as NextRequest);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, skipped: 'wa_bot_disabled' });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.sendFoonteMessage).not.toHaveBeenCalled();
   });
 });

@@ -96,6 +96,19 @@ async function handleReminder(request: NextRequest) {
     const supabase = createAdminClient();
     let adminSettings = DEFAULT_SYSTEM_REMINDER_SETTINGS;
     try { adminSettings = await getSystemReminderSettings(supabase); } catch { /* allows deploy before migration */ }
+
+    // Jika bot WA dinonaktifkan oleh admin, jangan kirim pesan apapun ke WhatsApp
+    if (!adminSettings.wa_bot_enabled) {
+      return NextResponse.json({
+        success: true,
+        sent: false,
+        reason: 'wa_bot_disabled',
+        detail: 'Layanan Bot WhatsApp dinonaktifkan oleh admin.',
+        waBotEnabled: false,
+        reminderTogetherEnabled: adminSettings.reminder_together_enabled,
+      });
+    }
+
     const foonte = getFoonteConfig();
     const targets = getFoonteTargets();
     if (!targets.length) throw new Error('Konfigurasikan FOONTE_WA_GROUP_ID atau FOONTE_WA_TARGETS');
@@ -146,10 +159,13 @@ async function handleReminder(request: NextRequest) {
     ).length;
     const adminDailyQuotaReached = totalSentToday >= adminSettings.max_reminders_per_day;
 
+    // Status apakah reminder bersama dinonaktifkan
+    const reminderTogetherDisabled = adminSettings.reminder_mode === 'bulk' && !adminSettings.reminder_together_enabled;
+
     // Mode bulk: ikuti jadwal global admin (start_time + interval).
     // Mode single: tiap user ikuti reminder_times-nya sendiri, BUKAN jadwal admin —
     //   ini mencegah tabrakan saat admin mengatur jam yang berbeda dari jadwal user.
-    const dueReportSessions = adminDailyQuotaReached ? [] : adminSettings.reminder_mode === 'bulk'
+    const dueReportSessions = (adminDailyQuotaReached || reminderTogetherDisabled) ? [] : adminSettings.reminder_mode === 'bulk'
       // Bulk follows the admin's global schedule and includes every connected participant
       // whose latest attendance status is still unreported, regardless of personal snooze/quota.
       ? (!globalDue || !bulkIntervalElapsed ? [] : unreportedSessions)
@@ -250,14 +266,37 @@ async function handleReminder(request: NextRequest) {
     const sessionsStillUnreported = unreportedSessions.length;
     const reason = reportSent || cookieWarningsSent > 0
       ? undefined
-      : adminDailyQuotaReached
-        ? 'admin_daily_quota_reached'
-        : !globalDue && adminSettings.reminder_mode === 'bulk' && sessionsStillUnreported > 0
-          ? 'global_schedule_not_due'
-          : sessionsStillUnreported === 0 && warningSessions.length === 0
-            ? 'no_unreported_or_cookie_warning_sessions'
-            : 'participants_blocked_by_settings_or_interval';
-    return NextResponse.json({ success: true, sent: reportSent || cookieWarningsSent > 0, reason, reportSent, reportMemberCount: dueReportSessions.length, cookieWarningsSent, reportProviderFailures, cookieProviderFailures, reminderMode: adminSettings.reminder_mode, globalReminderDue: globalDue, startTime: adminSettings.start_time, intervalSeconds: adminSettings.interval_seconds, activeSessions: eligibleSessions.length, sessionsWithAttendanceCheck: latestStatusByUser.size, sessionsStillUnreported, adminDailyQuotaReached, totalSentToday, maxRemindersPerDay: adminSettings.max_reminders_per_day });
+      : reminderTogetherDisabled
+        ? 'reminder_together_disabled'
+        : adminDailyQuotaReached
+          ? 'admin_daily_quota_reached'
+          : !globalDue && adminSettings.reminder_mode === 'bulk' && sessionsStillUnreported > 0
+            ? 'global_schedule_not_due'
+            : sessionsStillUnreported === 0 && warningSessions.length === 0
+              ? 'no_unreported_or_cookie_warning_sessions'
+              : 'participants_blocked_by_settings_or_interval';
+    return NextResponse.json({
+      success: true,
+      sent: reportSent || cookieWarningsSent > 0,
+      reason,
+      reportSent,
+      reportMemberCount: dueReportSessions.length,
+      cookieWarningsSent,
+      reportProviderFailures,
+      cookieProviderFailures,
+      reminderMode: adminSettings.reminder_mode,
+      globalReminderDue: globalDue,
+      startTime: adminSettings.start_time,
+      intervalSeconds: adminSettings.interval_seconds,
+      activeSessions: eligibleSessions.length,
+      sessionsWithAttendanceCheck: latestStatusByUser.size,
+      sessionsStillUnreported,
+      adminDailyQuotaReached,
+      totalSentToday,
+      maxRemindersPerDay: adminSettings.max_reminders_per_day,
+      reminderTogetherEnabled: adminSettings.reminder_together_enabled,
+      waBotEnabled: adminSettings.wa_bot_enabled,
+    });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
     return NextResponse.json({ error: 'Gagal menjalankan reminder', detail: error instanceof Error ? error.message : 'Kesalahan tidak diketahui' }, { status: 500 });

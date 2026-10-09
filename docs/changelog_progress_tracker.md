@@ -5,6 +5,13 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Added**: Aksi kontrol untuk mengaktifkan dan menonaktifkan **Reminder Bersama** (`reminder_together_enabled`) dan **Bot WhatsApp** (`wa_bot_enabled`) pada panel pengaturan admin reminder.
+- **Added**: Migration `20261009000001_admin_reminder_and_bot_controls.sql` yang menambahkan kolom boolean `reminder_together_enabled` dan `wa_bot_enabled` ke tabel `system_reminder_settings`.
+- **Added**: Dukungan method `PATCH` pada `/api/settings/reminder/admin` untuk aksi toggle cepat dan instan dengan feedback toast visual.
+- **Added**: Redesign menyeluruh antarmuka Pengaturan Admin Reminder (`AdminReminderSettingsForm.tsx`) dengan koleksi ikon Lucide lengkap (`ShieldCheck`, `Bot`, `Users`, `Power`, `Layers`, `Clock3`, `Timer`, `Gauge`, `Cookie`, `Hourglass`, `Save`), kartu switch toggle interaktif, badge status Aktif/Nonaktif, dan panduan deskripsi yang jelas.
+- **Changed**: Cron reminder (`/api/cron/reminder`) kini menghentikan pengiriman pesan WA bila `wa_bot_enabled` bernilai false, dan menonaktifkan pengiriman laporan bulk grup bila `reminder_together_enabled` bernilai false.
+- **Changed**: Webhook Fonnte (`/api/webhook/fonnte`) melewati pemrosesan perintah pesan masuk dan auto-laporan jika `wa_bot_enabled` dinonaktifkan oleh admin.
+- **Added**: Unit tests untuk service pengaturan sistem reminder dan skenario penonaktifan Bot WhatsApp pada webhook Fonnte.
 - **Fixed**: Webhook Fonnte membaca format nomor WhatsApp/JID dengan benar, memakai `member` untuk pengirim pesan grup dan `text` sebagai fallback balasan tombol; perintah `link` diparsing konsisten.
 - **Changed**: Error pencarian profil dan kegagalan kirim balasan Fonnte kini dicatat lebih jelas di log server agar proses link yang gagal dapat dibedakan dari webhook yang tidak diterima.
 - **Added**: Unit test untuk parsing payload Fonnte, normalisasi nomor, pesan grup, dan perintah link.

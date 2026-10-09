@@ -10,6 +10,7 @@ import { submitReportToMagangHub } from '@/lib/services/reportSubmitService';
 import { updateSessionTokens } from '@/lib/services/accountService';
 import { getFoonteConfig, sendFoonteMessage } from '@/lib/services/foonteService';
 import { parseFoonteIncomingMessage, parseLinkCommand } from '@/lib/services/fonnteWebhookUtils';
+import { getSystemReminderSettings } from '@/lib/services/systemReminderSettingsService';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -193,6 +194,21 @@ export async function POST(request: NextRequest) {
     console.log('[webhook/fonnte] Message skipped (invalid payload or empty content)');
     return NextResponse.json({ ok: true, skipped: 'empty_or_invalid_message' });
   }
+
+  // Cek apakah Bot WhatsApp diaktifkan oleh admin
+  let waBotEnabled = true;
+  try {
+    const adminSettings = await getSystemReminderSettings(createAdminClient());
+    waBotEnabled = adminSettings.wa_bot_enabled;
+  } catch {
+    waBotEnabled = true;
+  }
+
+  if (!waBotEnabled) {
+    console.log('[webhook/fonnte] Bot WhatsApp dinonaktifkan oleh admin');
+    return NextResponse.json({ ok: true, skipped: 'wa_bot_disabled' });
+  }
+
   const { phone, message, isGroup } = incoming;
 
   console.log('[webhook/fonnte] Parsed incoming:', { phone, message: message.slice(0, 100), isGroup });
