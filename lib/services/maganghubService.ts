@@ -881,7 +881,12 @@ export async function checkAndUpdateAttendance(
             ? attendancesRes.data
             : (attendancesRes.data as any).data;
           if (Array.isArray(list)) {
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayStr = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Jakarta',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            }).format(new Date());
             const foundToday = list.some(
               (item: any) =>
                 item?.date?.slice(0, 10) === todayStr ||

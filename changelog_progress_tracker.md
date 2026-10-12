@@ -5,11 +5,19 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Added**: Fitur penonaktifan reminder WhatsApp khusus hari akhir pekan / libur (`weekend_reminder_enabled`, default `false` agar libur di hari Sabtu & Minggu).
+- **Added**: Migration `20261011000001_add_weekend_reminder_enabled.sql` yang menambahkan kolom boolean `weekend_reminder_enabled` ke tabel `system_reminder_settings`.
+- **Added**: Kartu kontrol switch instan untuk "Reminder Weekend" pada form pengaturan admin (`AdminReminderSettingsForm.tsx`) lengkap dengan ikon `CalendarOff` Lucide, badge status, dan toggle instan via endpoint `PATCH`.
+- **Fixed**: Perbaikan bug nama peserta yang sudah absen namun tetap muncul di daftar "belum lapor":
+  - Pada `/api/cron/reminder`, filter status `attendance_checks` kini dibatasi HANYA untuk hari ini (`isTodayInTz`), mencegah riwayat kemarin/hari lampau keliru terbawa ke reminder hari ini.
+  - Implementasi *Live Attendance Verification* sebelum pesan reminder WA dikirim: peserta yang belum tercatat 'selesai' hari ini diverifikasi langsung secara real-time ke API MagangHub, sehingga peserta yang baru saja absen langsung terdeteksi 'selesai' dan otomatis dikecualikan dari list pesan WA.
+  - Peningkatan parser status API MagangHub (`parseApiResponse` & edge function) agar mengenali status pengisian resmi MagangHub (`PRESENT`, `submitted`, `hadir`, `approved`) serta status libur/off-day (`off-day`, `holiday`, `libur`).
+  - Koreksi komparasi tanggal `todayStr` di `maganghubService.ts` agar menggunakan timezone Asia/Jakarta (WIB) alih-alih UTC.
 - **Added**: Aksi kontrol untuk mengaktifkan dan menonaktifkan **Reminder Bersama** (`reminder_together_enabled`) dan **Bot WhatsApp** (`wa_bot_enabled`) pada panel pengaturan admin reminder.
 - **Added**: Migration `20261009000001_admin_reminder_and_bot_controls.sql` yang menambahkan kolom boolean `reminder_together_enabled` dan `wa_bot_enabled` ke tabel `system_reminder_settings`.
 - **Added**: Dukungan method `PATCH` pada `/api/settings/reminder/admin` untuk aksi toggle cepat dan instan dengan feedback toast visual.
-- **Added**: Redesign menyeluruh antarmuka Pengaturan Admin Reminder (`AdminReminderSettingsForm.tsx`) dengan koleksi ikon Lucide lengkap (`ShieldCheck`, `Bot`, `Users`, `Power`, `Layers`, `Clock3`, `Timer`, `Gauge`, `Cookie`, `Hourglass`, `Save`), kartu switch toggle interaktif, badge status Aktif/Nonaktif, dan panduan deskripsi yang jelas.
-- **Changed**: Cron reminder (`/api/cron/reminder`) kini menghentikan pengiriman pesan WA bila `wa_bot_enabled` bernilai false, dan menonaktifkan pengiriman laporan bulk grup bila `reminder_together_enabled` bernilai false.
+- **Added**: Redesign menyeluruh antarmuka Pengaturan Admin Reminder (`AdminReminderSettingsForm.tsx`) dengan koleksi ikon Lucide lengkap (`ShieldCheck`, `Bot`, `Users`, `Power`, `Layers`, `Clock3`, `Timer`, `Gauge`, `Cookie`, `Hourglass`, `Save`, `CalendarOff`), kartu switch toggle interaktif, badge status Aktif/Nonaktif, dan panduan deskripsi yang jelas.
+- **Changed**: Cron reminder (`/api/cron/reminder`) kini menghentikan pengiriman pesan WA bila `wa_bot_enabled` bernilai false, atau bila hari ini Sabtu/Minggu dan `weekend_reminder_enabled` dinonaktifkan, serta menonaktifkan pengiriman laporan bulk grup bila `reminder_together_enabled` bernilai false.
 - **Changed**: Webhook Fonnte (`/api/webhook/fonnte`) melewati pemrosesan perintah pesan masuk dan auto-laporan jika `wa_bot_enabled` dinonaktifkan oleh admin.
 - **Added**: Unit tests untuk service pengaturan sistem reminder dan skenario penonaktifan Bot WhatsApp pada webhook Fonnte.
 

@@ -18,6 +18,7 @@ import {
   AlertCircle,
   Sparkles,
   Power,
+  CalendarOff,
 } from 'lucide-react';
 import { REMINDER_INTERVAL_OPTIONS } from '@/lib/types/reminder';
 import type { SystemReminderSettings } from '@/lib/services/systemReminderSettingsService';
@@ -25,7 +26,7 @@ import type { SystemReminderSettings } from '@/lib/services/systemReminderSettin
 export default function AdminReminderSettingsForm({ initialSettings }: { initialSettings: SystemReminderSettings }) {
   const [settings, setSettings] = useState<SystemReminderSettings>(initialSettings);
   const [saving, setSaving] = useState(false);
-  const [togglingKey, setTogglingKey] = useState<'reminder_together_enabled' | 'wa_bot_enabled' | null>(null);
+  const [togglingKey, setTogglingKey] = useState<'reminder_together_enabled' | 'wa_bot_enabled' | 'weekend_reminder_enabled' | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   const update = <K extends keyof SystemReminderSettings>(key: K, value: SystemReminderSettings[K]) => {
@@ -33,10 +34,14 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
     setSettings((current) => ({ ...current, [key]: value }));
   };
 
-  /** Aksi toggle instan untuk Reminder Bersama atau Bot WA */
-  async function toggleAction(key: 'reminder_together_enabled' | 'wa_bot_enabled') {
+  /** Aksi toggle instan untuk Reminder Bersama, Bot WA, atau Reminder Weekend */
+  async function toggleAction(key: 'reminder_together_enabled' | 'wa_bot_enabled' | 'weekend_reminder_enabled') {
     const nextVal = !settings[key];
-    const label = key === 'reminder_together_enabled' ? 'Reminder Bersama' : 'Bot WhatsApp';
+    const label = key === 'reminder_together_enabled'
+      ? 'Reminder Bersama'
+      : key === 'wa_bot_enabled'
+      ? 'Bot WhatsApp'
+      : 'Reminder Akhir Pekan (Weekend)';
     setTogglingKey(key);
     update(key, nextVal);
 
@@ -81,6 +86,7 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
 
   const isWaBotActive = settings.wa_bot_enabled ?? true;
   const isReminderTogetherActive = settings.reminder_together_enabled ?? true;
+  const isWeekendReminderActive = settings.weekend_reminder_enabled ?? false;
 
   return (
     <form
@@ -118,7 +124,7 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
           <span>Aksi Kontrol Layanan</span>
         </h3>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           {/* Card Aksi 1: Bot WhatsApp */}
           <div
             className={`card relative flex flex-col justify-between gap-4 p-5 transition-all border ${
@@ -285,6 +291,91 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
                   <Power size={12} />
                 )}
                 <span>{isReminderTogetherActive ? 'Nonaktifkan Reminder Bersama' : 'Aktifkan Reminder Bersama'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card Aksi 3: Reminder Akhir Pekan (Sabtu & Minggu / Hari Libur) */}
+          <div
+            className={`card relative flex flex-col justify-between gap-4 p-5 transition-all border ${
+              isWeekendReminderActive
+                ? 'border-indigo-500/30 bg-indigo-50/20'
+                : 'border-slate-200/90 bg-slate-50/60'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3.5">
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-colors ${
+                    isWeekendReminderActive
+                      ? 'bg-indigo-500/10 text-indigo-600'
+                      : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  <CalendarOff size={22} aria-hidden="true" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-text-primary">Reminder Weekend</h4>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        isWeekendReminderActive
+                          ? 'bg-indigo-100 text-indigo-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          isWeekendReminderActive ? 'bg-indigo-600' : 'bg-amber-600'
+                        }`}
+                      />
+                      {isWeekendReminderActive ? 'Aktif di Weekend' : 'Nonaktif (Libur)'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                    Kirim reminder di hari Sabtu &amp; Minggu. Nonaktifkan jika akhir pekan libur agar peserta tidak terganggu.
+                  </p>
+                </div>
+              </div>
+
+              {/* Switch Aksi Reminder Weekend */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isWeekendReminderActive}
+                aria-label="Aktifkan atau nonaktifkan Reminder di Hari Weekend"
+                disabled={togglingKey === 'weekend_reminder_enabled'}
+                onClick={() => toggleAction('weekend_reminder_enabled')}
+                className="relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50"
+                style={{ backgroundColor: isWeekendReminderActive ? '#6366f1' : '#cbd5e1' }}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                    isWeekendReminderActive ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200/60 pt-3 text-xs">
+              <span className="text-[11px] text-text-muted">Aksi Cepat:</span>
+              <button
+                type="button"
+                onClick={() => toggleAction('weekend_reminder_enabled')}
+                disabled={togglingKey === 'weekend_reminder_enabled'}
+                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                  isWeekendReminderActive
+                    ? 'text-rose-600 hover:bg-rose-50'
+                    : 'text-indigo-600 hover:bg-indigo-50'
+                }`}
+              >
+                {togglingKey === 'weekend_reminder_enabled' ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Power size={12} />
+                )}
+                <span>{isWeekendReminderActive ? 'Nonaktifkan (Hari Libur)' : 'Aktifkan di Weekend'}</span>
               </button>
             </div>
           </div>

@@ -20,6 +20,7 @@ const schema = z.object({
   max_reminders_per_day: z.number().int().min(1).max(50),
   reminder_together_enabled: z.boolean().default(true),
   wa_bot_enabled: z.boolean().default(true),
+  weekend_reminder_enabled: z.boolean().default(false),
 });
 
 async function authorized() {

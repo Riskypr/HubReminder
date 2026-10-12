@@ -12,6 +12,8 @@ export interface SystemReminderSettings {
   reminder_together_enabled: boolean;
   /** Status pengaktifan layanan Bot WhatsApp (pengiriman pesan & auto-laporan) */
   wa_bot_enabled: boolean;
+  /** Status pengaktifan reminder WhatsApp pada akhir pekan (Sabtu & Minggu). Jika false, libur di akhir pekan. */
+  weekend_reminder_enabled: boolean;
   updated_at?: string | null;
 }
 
@@ -24,6 +26,7 @@ export const DEFAULT_SYSTEM_REMINDER_SETTINGS: SystemReminderSettings = {
   max_reminders_per_day: 10,
   reminder_together_enabled: true,
   wa_bot_enabled: true,
+  weekend_reminder_enabled: false,
   updated_at: null,
 };
 
@@ -46,5 +49,8 @@ export async function getSystemReminderSettings(client: SupabaseClient): Promise
     wa_bot_enabled: typeof data.wa_bot_enabled === 'boolean'
       ? data.wa_bot_enabled
       : DEFAULT_SYSTEM_REMINDER_SETTINGS.wa_bot_enabled,
+    weekend_reminder_enabled: typeof data.weekend_reminder_enabled === 'boolean'
+      ? data.weekend_reminder_enabled
+      : DEFAULT_SYSTEM_REMINDER_SETTINGS.weekend_reminder_enabled,
   };
 }

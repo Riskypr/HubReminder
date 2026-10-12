@@ -167,5 +167,22 @@ describe('parseApiResponse()', () => {
     });
     expect(resFilled.status).toBe('selesai');
   });
+
+  it('harus mendeteksi selesai saat status bernilai PRESENT, submitted, hadir, atau approved', () => {
+    expect(parseApiResponse({ status: 'PRESENT' }).status).toBe('selesai');
+    expect(parseApiResponse({ status: 'submitted' }).status).toBe('selesai');
+    expect(parseApiResponse({ status: 'HADIR' }).status).toBe('selesai');
+    expect(parseApiResponse({ status: 'approved' }).status).toBe('selesai');
+  });
+
+  it('harus mendeteksi selesai saat status bernilai off-day atau holiday', () => {
+    expect(parseApiResponse({ status: 'off-day' }).status).toBe('selesai');
+    expect(parseApiResponse({ status: 'holiday' }).status).toBe('selesai');
+  });
+
+  it('harus mendeteksi selesai saat objek attendance memiliki id atau status valid', () => {
+    expect(parseApiResponse({ attendance: { id: 123, status: 'PRESENT' } }).status).toBe('selesai');
+    expect(parseApiResponse({ attendance: { id: 456 } }).status).toBe('selesai');
+  });
 });
 

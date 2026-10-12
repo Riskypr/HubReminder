@@ -112,15 +112,21 @@ Deno.serve(async (req) => {
           detectedVia = 'login_redirect';
         } else if (fetchRes.apiData?.home) {
           const home = ((fetchRes.apiData.home as any).data ?? fetchRes.apiData.home) as Record<string, any>;
-          if (home.is_scheduled_off_day || home.is_holiday) {
+          const normalizedHomeStatus = String(home.status || '').toLowerCase().trim();
+          const filledStatuses = ['filled', 'selesai', 'done', 'present', 'submitted', 'approved', 'hadir', 'complete', 'completed'];
+          const isOffDay = home.is_scheduled_off_day || home.is_holiday || ['off-day', 'off_day', 'holiday', 'libur'].includes(normalizedHomeStatus);
+
+          if (isOffDay) {
             detectedStatus = 'selesai';
             detectedVia = 'api:off_day_or_holiday';
           } else if (
             home.has_attendance === true ||
             home.has_attendance === 1 ||
             home.has_attendance === 'true' ||
-            home.status === 'filled' ||
-            home.status === 'selesai' ||
+            home.has_attendance === '1' ||
+            filledStatuses.includes(normalizedHomeStatus) ||
+            home.is_attendance_filled === true ||
+            home.is_present === true ||
             (home.attendance && typeof home.attendance === 'object' && Object.keys(home.attendance).length > 0)
           ) {
             detectedStatus = 'selesai';

@@ -12,8 +12,8 @@ export interface ParseResult {
 
 export interface MagangHubHomeApiData {
   has_attendance?: boolean | number | string | null;
-  is_scheduled_off_day?: boolean | number | null;
-  is_holiday?: boolean | number | null;
+  is_scheduled_off_day?: boolean | number | string | null;
+  is_holiday?: boolean | number | string | null;
   date?: string;
   holiday?: {
     name?: string;
@@ -47,12 +47,20 @@ export function parseApiResponse(rawPayload: MagangHubHomeApiData | null | undef
       : rawPayload
   ) as MagangHubHomeApiData;
 
+  const normalizedStatus = typeof data.status === 'string' ? data.status.toLowerCase().trim() : '';
+
   // 1. Cek Hari Libur / Off Day (jadwal libur / libur nasional)
   const isOffDay =
     data.is_scheduled_off_day === true ||
     data.is_scheduled_off_day === 1 ||
+    data.is_scheduled_off_day === 'true' ||
     data.is_holiday === true ||
     data.is_holiday === 1 ||
+    data.is_holiday === 'true' ||
+    normalizedStatus === 'off-day' ||
+    normalizedStatus === 'off_day' ||
+    normalizedStatus === 'holiday' ||
+    normalizedStatus === 'libur' ||
     Boolean(data.holiday && data.holiday.name);
 
   if (isOffDay) {
@@ -64,14 +72,48 @@ export function parseApiResponse(rawPayload: MagangHubHomeApiData | null | undef
   }
 
   // 2. Cek apakah laporan / kehadiran sudah terisi
+  const filledStatuses = [
+    'filled',
+    'selesai',
+    'done',
+    'present',
+    'submitted',
+    'approved',
+    'hadir',
+    'complete',
+    'completed',
+  ];
+
+  const attendanceObj = data.attendance && typeof data.attendance === 'object' && !Array.isArray(data.attendance)
+    ? (data.attendance as Record<string, unknown>)
+    : null;
+
+  const attendanceObjStatus = attendanceObj && typeof attendanceObj.status === 'string'
+    ? attendanceObj.status.toLowerCase().trim()
+    : '';
+
+  const hasAttendanceObjFilled = Boolean(
+    attendanceObj && (
+      filledStatuses.includes(attendanceObjStatus) ||
+      attendanceObj.has_attendance === true ||
+      attendanceObj.has_attendance === 1 ||
+      attendanceObj.has_attendance === 'true' ||
+      (attendanceObj.id !== undefined && attendanceObj.id !== null) ||
+      (attendanceObjStatus && !['absent', 'empty', 'pending', 'belum_lapor'].includes(attendanceObjStatus)) ||
+      (Object.keys(attendanceObj).length > 0 && attendanceObj.status === undefined && attendanceObj.id === undefined)
+    )
+  );
+
   const isFilled =
     data.has_attendance === true ||
     data.has_attendance === 1 ||
     data.has_attendance === 'true' ||
-    data.status === 'filled' ||
-    data.status === 'selesai' ||
-    data.status === 'done' ||
-    Boolean(data.attendance && typeof data.attendance === 'object' && Object.keys(data.attendance).length > 0) ||
+    data.has_attendance === '1' ||
+    filledStatuses.includes(normalizedStatus) ||
+    data.is_attendance_filled === true ||
+    data.is_filled === true ||
+    data.is_present === true ||
+    hasAttendanceObjFilled ||
     Boolean(Array.isArray(data.attendances) && data.attendances.length > 0);
 
   if (isFilled) {
@@ -91,8 +133,8 @@ export function parseApiResponse(rawPayload: MagangHubHomeApiData | null | undef
     'is_holiday' in data ||
     'date' in data ||
     'attendance' in data ||
-    data.status === 'empty' ||
-    data.status === 'pending';
+    normalizedStatus === 'empty' ||
+    normalizedStatus === 'pending';
 
   if (isRecognizedPayload) {
     return {

@@ -6,9 +6,10 @@ import {
 } from '@/lib/services/systemReminderSettingsService';
 
 describe('SystemReminderSettings Service', () => {
-  it('has default settings with reminder_together_enabled and wa_bot_enabled active', () => {
+  it('has default settings with reminder_together_enabled and wa_bot_enabled active, weekend_reminder_enabled disabled', () => {
     expect(DEFAULT_SYSTEM_REMINDER_SETTINGS.reminder_together_enabled).toBe(true);
     expect(DEFAULT_SYSTEM_REMINDER_SETTINGS.wa_bot_enabled).toBe(true);
+    expect(DEFAULT_SYSTEM_REMINDER_SETTINGS.weekend_reminder_enabled).toBe(false);
     expect(DEFAULT_SYSTEM_REMINDER_SETTINGS.reminder_mode).toBe('bulk');
     expect(DEFAULT_SYSTEM_REMINDER_SETTINGS.max_reminders_per_day).toBe(10);
   });

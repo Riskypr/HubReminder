@@ -5,6 +5,8 @@ import { getFoonteConfig, getFoonteTargets, sendFoonteMessage, type FoonteSendRe
 import { createAdminClient } from '@/lib/supabase/admin';
 import { DEFAULT_SYSTEM_REMINDER_SETTINGS, getSystemReminderSettings } from '@/lib/services/systemReminderSettingsService';
 import { decryptSessionSecret } from '@/lib/utils/crypto';
+import { checkAndUpdateAttendance } from '@/lib/services/maganghubService';
+import { isTodayInTz } from '@/lib/utils/time';
 import type { AttendanceStatus } from '@/lib/types/attendance';
 
 export const dynamic = 'force-dynamic';
@@ -97,7 +99,7 @@ async function handleReminder(request: NextRequest) {
     let adminSettings = DEFAULT_SYSTEM_REMINDER_SETTINGS;
     try { adminSettings = await getSystemReminderSettings(supabase); } catch { /* allows deploy before migration */ }
 
-    // Jika bot WA dinonaktifkan oleh admin, jangan kirim pesan apapun ke WhatsApp
+    // 1. Jika bot WA dinonaktifkan oleh admin, jangan kirim pesan apapun ke WhatsApp
     if (!adminSettings.wa_bot_enabled) {
       return NextResponse.json({
         success: true,
@@ -105,6 +107,28 @@ async function handleReminder(request: NextRequest) {
         reason: 'wa_bot_disabled',
         detail: 'Layanan Bot WhatsApp dinonaktifkan oleh admin.',
         waBotEnabled: false,
+        weekendReminderEnabled: adminSettings.weekend_reminder_enabled,
+        reminderTogetherEnabled: adminSettings.reminder_together_enabled,
+      });
+    }
+
+    const now = new Date();
+
+    // 2. Jika hari ini akhir pekan (Sabtu & Minggu) dan reminder weekend dinonaktifkan karena libur
+    const jakartaDayOfWeek = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Jakarta',
+      weekday: 'short',
+    }).format(now);
+    const isWeekend = jakartaDayOfWeek === 'Sat' || jakartaDayOfWeek === 'Sun';
+
+    if (isWeekend && !adminSettings.weekend_reminder_enabled) {
+      return NextResponse.json({
+        success: true,
+        sent: false,
+        reason: 'weekend_reminder_disabled',
+        detail: 'Pengiriman reminder WhatsApp dinonaktifkan pada hari libur akhir pekan (Sabtu & Minggu).',
+        waBotEnabled: adminSettings.wa_bot_enabled,
+        weekendReminderEnabled: false,
         reminderTogetherEnabled: adminSettings.reminder_together_enabled,
       });
     }
@@ -112,7 +136,6 @@ async function handleReminder(request: NextRequest) {
     const foonte = getFoonteConfig();
     const targets = getFoonteTargets();
     if (!targets.length) throw new Error('Konfigurasikan FOONTE_WA_GROUP_ID atau FOONTE_WA_TARGETS');
-    const now = new Date();
     const globalDue = isGlobalReminderDue(now, adminSettings.start_time, adminSettings.interval_seconds);
 
     const { data: sessionData, error: sessionError } = await supabase
@@ -127,8 +150,18 @@ async function handleReminder(request: NextRequest) {
       ? await supabase.from('attendance_checks').select('user_id, status, checked_at').in('user_id', eligibleIds).order('checked_at', { ascending: false })
       : { data: [], error: null };
     if (checkError) throw new Error(`Gagal mengambil status laporan: ${checkError.message}`);
-    const latestStatusByUser = new Map<string, AttendanceStatus>();
-    for (const check of (checks ?? []) as CheckRow[]) if (!latestStatusByUser.has(check.user_id)) latestStatusByUser.set(check.user_id, check.status);
+
+    // Filter status terbaru KHUSUS HARI INI saja (jangan gunakan status dari hari sebelumnya / kemarin)
+    const latestTodayStatusByUser = new Map<string, AttendanceStatus>();
+    for (const check of (checks ?? []) as CheckRow[]) {
+      if (!latestTodayStatusByUser.has(check.user_id)) {
+        const session = eligibleSessions.find((s) => s.user_id === check.user_id);
+        const tz = session?.profiles?.timezone || 'Asia/Jakarta';
+        if (isTodayInTz(check.checked_at, tz)) {
+          latestTodayStatusByUser.set(check.user_id, check.status);
+        }
+      }
+    }
 
     const ids = sessions.map((session) => session.user_id);
     const [{ data: settingsData, error: settingsError }, { data: notificationData, error: notificationError }, { data: cookieLogData, error: cookieLogError }] = await Promise.all([
@@ -143,7 +176,6 @@ async function handleReminder(request: NextRequest) {
     const notificationRows = (notificationData ?? []) as NotificationRow[];
     const cookieLogs = (cookieLogData ?? []) as CookieLogRow[];
 
-    const unreportedSessions = eligibleSessions.filter((session) => latestStatusByUser.get(session.user_id) === 'belum_lapor');
     const scheduleUpdatedAt = adminSettings.updated_at ? Date.parse(adminSettings.updated_at) : 0;
     const lastReminderAfterScheduleChange = notificationRows
       .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
@@ -152,7 +184,6 @@ async function handleReminder(request: NextRequest) {
       now.getTime() - lastReminderAfterScheduleChange >= adminSettings.interval_seconds * 1000;
 
     // Hitung total reminder WA yang sudah terkirim hari ini (semua user, mode apapun).
-    // Digunakan untuk melindungi kuota Foonte agar tidak jebol.
     const todayJakarta = localDate(now, 'Asia/Jakarta');
     const totalSentToday = notificationRows.filter(
       (log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta,
@@ -162,15 +193,48 @@ async function handleReminder(request: NextRequest) {
     // Status apakah reminder bersama dinonaktifkan
     const reminderTogetherDisabled = adminSettings.reminder_mode === 'bulk' && !adminSettings.reminder_together_enabled;
 
+    // Evaluasi apakah reminder berpotensi dikirim saat ini
+    const isPotentiallyDue = adminSettings.reminder_mode === 'bulk'
+      ? (globalDue && bulkIntervalElapsed && !adminDailyQuotaReached && !reminderTogetherDisabled)
+      : (!adminDailyQuotaReached && !reminderTogetherDisabled);
+
+    // LIVE VERIFICATION: Jika reminder berpotensi dikirim saat ini, verifikasi peserta
+    // yang belum tercatat 'selesai' hari ini langsung ke MagangHub untuk mencegah
+    // nama peserta yang SUDAH absen keliru dikirim sebagai belum absen!
+    if (isPotentiallyDue) {
+      const candidatesToVerify = eligibleSessions.filter((session) => {
+        return latestTodayStatusByUser.get(session.user_id) !== 'selesai';
+      });
+
+      if (candidatesToVerify.length > 0) {
+        const concurrency = 4;
+        for (let index = 0; index < candidatesToVerify.length; index += concurrency) {
+          const batch = candidatesToVerify.slice(index, index + concurrency);
+          await Promise.allSettled(
+            batch.map(async (session) => {
+              try {
+                const plaintext = await decryptSessionSecret(session.encrypted_session);
+                if (!plaintext) return;
+                const checkResult = await checkAndUpdateAttendance(session.user_id, plaintext, supabase);
+                if (checkResult.success && checkResult.status !== 'unknown') {
+                  latestTodayStatusByUser.set(session.user_id, checkResult.status);
+                }
+              } catch (verifyError) {
+                console.warn(`[cron/reminder] Live verification gagal untuk peserta ${session.user_id}:`, verifyError);
+              }
+            })
+          );
+        }
+      }
+    }
+
+    // Ambil daftar peserta yang BENAR-BENAR belum lapor untuk hari ini
+    const unreportedSessions = eligibleSessions.filter((session) => latestTodayStatusByUser.get(session.user_id) === 'belum_lapor');
+
     // Mode bulk: ikuti jadwal global admin (start_time + interval).
-    // Mode single: tiap user ikuti reminder_times-nya sendiri, BUKAN jadwal admin —
-    //   ini mencegah tabrakan saat admin mengatur jam yang berbeda dari jadwal user.
+    // Mode single: tiap user ikuti reminder_times-nya sendiri, BUKAN jadwal admin.
     const dueReportSessions = (adminDailyQuotaReached || reminderTogetherDisabled) ? [] : adminSettings.reminder_mode === 'bulk'
-      // Bulk follows the admin's global schedule and includes every connected participant
-      // whose latest attendance status is still unreported, regardless of personal snooze/quota.
       ? (!globalDue || !bulkIntervalElapsed ? [] : unreportedSessions)
-      // Single mode: setiap user diperiksa berdasarkan reminder_times-nya sendiri.
-      // globalDue TIDAK digunakan di sini agar jadwal user tidak tabrakan dengan jadwal admin.
       : unreportedSessions.filter((session) => {
         const settings = settingsByUser.get(session.user_id);
         if (!settings?.enabled) return false;
@@ -179,13 +243,10 @@ async function handleReminder(request: NextRequest) {
         if (settings.snooze_until === today) return false;
         const todayLogs = notificationRows.filter((log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today);
         if (todayLogs.length >= settings.max_reminders_per_day) return false;
-        // Cek apakah waktu sekarang cocok dengan salah satu reminder_times user.
-        // Tidak bergantung pada jadwal admin sehingga bebas tabrakan.
         if (!isUserReminderTimeDue(now, settings.reminder_times ?? [], timezone)) return false;
         const latestLog = todayLogs
           .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
           .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
-        // Pastikan interval minimum terpenuhi sejak reminder terakhir.
         return !latestLog || now.getTime() - latestLog >= (settings.interval_seconds ?? adminSettings.interval_seconds) * 1000;
       });
 
@@ -289,13 +350,14 @@ async function handleReminder(request: NextRequest) {
       startTime: adminSettings.start_time,
       intervalSeconds: adminSettings.interval_seconds,
       activeSessions: eligibleSessions.length,
-      sessionsWithAttendanceCheck: latestStatusByUser.size,
+      sessionsWithAttendanceCheck: latestTodayStatusByUser.size,
       sessionsStillUnreported,
       adminDailyQuotaReached,
       totalSentToday,
       maxRemindersPerDay: adminSettings.max_reminders_per_day,
       reminderTogetherEnabled: adminSettings.reminder_together_enabled,
       waBotEnabled: adminSettings.wa_bot_enabled,
+      weekendReminderEnabled: adminSettings.weekend_reminder_enabled,
     });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
