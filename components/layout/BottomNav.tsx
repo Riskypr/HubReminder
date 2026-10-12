@@ -3,22 +3,27 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Clock3, History, Settings2, LogOut, ExternalLink, Sparkles, UserCheck } from 'lucide-react';
+import { Clock3, History, Settings2, LogOut, ExternalLink, Sparkles, ShieldCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { toast } from 'react-toastify';
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Clock3, id: 'nav-dashboard' },
   { href: '/history', label: 'Riwayat', icon: History, id: 'nav-history' },
   { href: '/settings/reminder', label: 'Pengaturan', icon: Settings2, id: 'nav-settings' },
 ];
 
-export default function BottomNav() {
+export default function BottomNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const navItems = isAdmin
+    ? [...BASE_NAV_ITEMS, { href: '/admin', label: 'Admin', icon: ShieldCheck, id: 'nav-admin' }]
+    : BASE_NAV_ITEMS;
+
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -57,7 +62,7 @@ export default function BottomNav() {
 
         {/* Navigation Links */}
         <div className="flex w-full items-center justify-around lg:flex-col lg:items-stretch lg:gap-1.5">
-          {NAV_ITEMS.map(({ href, label, icon: Icon, id }) => {
+          {navItems.map(({ href, label, icon: Icon, id }) => {
             const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
             return (
               <Link

@@ -1,13 +1,12 @@
 // app/(dashboard)/settings/reminder/page.tsx
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { getReminderSettings } from '@/lib/services/reminderSettingsService';
 import ReminderSettingsForm from '@/components/settings/ReminderSettingsForm';
 import SettingsTabs from '@/components/settings/SettingsTabs';
-import AdminReminderSettingsForm from '@/components/settings/AdminReminderSettingsForm';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { getSystemReminderSettings, isReminderAdmin } from '@/lib/services/systemReminderSettingsService';
-import { BellRing, Sparkles } from 'lucide-react';
+import { isReminderAdmin } from '@/lib/services/systemReminderSettingsService';
+import { BellRing, Sparkles, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export const metadata = {
   title: 'Pengaturan Reminder — HubReminder',
@@ -25,9 +24,7 @@ export default async function ReminderSettingsPage() {
   if (!user) redirect('/login');
 
   const settings = await getReminderSettings(user.id, supabase);
-  const adminSettings = isReminderAdmin(user.email)
-    ? await getSystemReminderSettings(createAdminClient()).catch(() => null)
-    : null;
+  const isAdmin = isReminderAdmin(user.email);
 
   return (
     <div className="space-y-6">
@@ -47,14 +44,38 @@ export default async function ReminderSettingsPage() {
               Pengaturan Jadwal Reminder
             </h1>
             <p className="text-xs text-text-secondary">
-              Sesuaikan jam pengingat harian, frekuensi maksimal, dan jeda waktu antar notifikasi.
+              Sesuaikan jam pengingat harian, frekuensi maksimal, dan jeda waktu antar notifikasi pribadi.
             </p>
           </div>
         </div>
       </div>
 
       <ReminderSettingsForm initialSettings={settings} />
-      {adminSettings && <AdminReminderSettingsForm initialSettings={adminSettings} />}
+
+      {isAdmin && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-white p-4.5 sm:flex-row sm:items-center sm:justify-between sm:p-5 shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+              <ShieldCheck size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h3 className="text-xs font-bold text-indigo-950 sm:text-sm">
+                Pengaturan Sistem &amp; Bot WhatsApp Admin
+              </h3>
+              <p className="text-[11px] text-indigo-700/80 sm:text-xs">
+                Pengaturan global admin kini dipisahkan ke menu khusus agar tampilan pengaturan akun tetap clean dan fokus.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/admin"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700 active:scale-95"
+          >
+            <span>Buka Panel Admin</span>
+            <ArrowRight size={14} aria-hidden="true" />
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

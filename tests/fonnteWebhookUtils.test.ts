@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeWhatsAppPhone, parseFoonteIncomingMessage, parseLinkCommand } from '@/lib/services/fonnteWebhookUtils';
+import {
+  normalizeWhatsAppPhone,
+  parseFoonteIncomingMessage,
+  parseLinkCommand,
+  parseUserBotAction,
+} from '@/lib/services/fonnteWebhookUtils';
 
 describe('normalizeWhatsAppPhone()', () => {
   it('normalizes Indonesian numbers and removes WhatsApp JID suffixes', () => {
@@ -50,3 +55,57 @@ describe('parseLinkCommand()', () => {
     expect(parseLinkCommand('link')).toBeNull();
   });
 });
+
+describe('parseUserBotAction()', () => {
+  it('parses approve commands', () => {
+    expect(parseUserBotAction('kirim')).toEqual({ type: 'approve' });
+    expect(parseUserBotAction('KIRIM')).toEqual({ type: 'approve' });
+    expect(parseUserBotAction('ya')).toEqual({ type: 'approve' });
+    expect(parseUserBotAction('oke')).toEqual({ type: 'approve' });
+    expect(parseUserBotAction('setuju')).toEqual({ type: 'approve' });
+  });
+
+  it('parses regenerate commands', () => {
+    expect(parseUserBotAction('ulang')).toEqual({ type: 'regenerate' });
+    expect(parseUserBotAction('REGEN')).toEqual({ type: 'regenerate' });
+    expect(parseUserBotAction('generate ulang')).toEqual({ type: 'regenerate' });
+  });
+
+  it('parses cancel commands', () => {
+    expect(parseUserBotAction('batal')).toEqual({ type: 'cancel' });
+    expect(parseUserBotAction('cancel')).toEqual({ type: 'cancel' });
+  });
+
+  it('parses edit commands', () => {
+    expect(parseUserBotAction('edit')).toEqual({ type: 'edit', newContent: null });
+    expect(parseUserBotAction('revisi')).toEqual({ type: 'edit', newContent: null });
+    expect(parseUserBotAction('edit: hari ini belajar backend')).toEqual({
+      type: 'edit',
+      newContent: 'hari ini belajar backend',
+    });
+    expect(parseUserBotAction('revisi membuat unit testing')).toEqual({
+      type: 'edit',
+      newContent: 'membuat unit testing',
+    });
+  });
+
+  it('parses status command', () => {
+    expect(parseUserBotAction('status')).toEqual({ type: 'status' });
+    expect(parseUserBotAction('STATUS')).toEqual({ type: 'status' });
+  });
+
+  it('parses link command', () => {
+    expect(parseUserBotAction('link Budi Santoso')).toEqual({
+      type: 'link',
+      name: 'Budi Santoso',
+    });
+  });
+
+  it('parses normal activity input', () => {
+    expect(parseUserBotAction('hari ini mengerjakan halaman admin')).toEqual({
+      type: 'report_input',
+      content: 'hari ini mengerjakan halaman admin',
+    });
+  });
+});
+

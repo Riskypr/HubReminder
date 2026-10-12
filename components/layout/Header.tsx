@@ -11,9 +11,10 @@ import { toast } from 'react-toastify';
 
 interface HeaderProps {
   title?: string;
+  isAdmin?: boolean;
 }
 
-export default function Header({ title = 'HubReminder' }: HeaderProps) {
+export default function Header({ title = 'HubReminder', isAdmin = false }: HeaderProps) {
   const router = useRouter();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -54,6 +55,18 @@ export default function Header({ title = 'HubReminder' }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="group inline-flex items-center gap-1.5 rounded-2xl border border-indigo-200 bg-indigo-50/90 px-3 py-2 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-100 hover:border-indigo-300"
+              title="Panel Admin"
+              id="header-open-admin"
+            >
+              <ShieldCheck size={14} className="text-indigo-600" aria-hidden="true" />
+              <span className="hidden sm:inline">Panel Admin</span>
+            </Link>
+          )}
+
           <Link
             href="https://monev.maganghub.kemnaker.go.id/dashboard"
             target="_blank"

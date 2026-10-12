@@ -5,6 +5,17 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Changed**: Bot WhatsApp auto-submit laporan (`/api/webhook/fonnte`) diubah agar **tidak langsung submit**. Bot kini membuat draf laporan (Gemini AI), menyimpannya dengan status `waiting_approval`, dan mengirimkan pratinjau lengkap ke WhatsApp dengan instruksi persetujuan pengguna:
+  - Balas `KIRIM`, `YA`, `OKE`, atau `SETUJU` untuk menyetujui dan submit ke MagangHub.
+  - Balas `ULANG` atau `REGEN` untuk generate ulang draf menggunakan Gemini AI.
+  - Balas `EDIT [catatan baru]` untuk merevisi kegiatan dan membuat draf baru.
+  - Balas `BATAL` untuk membatalkan draf laporan aktif hari ini.
+- **Added**: Migration `20261012000001_add_waiting_approval_status.sql` untuk memperluas constraint status tabel `public.wa_report_sessions` agar mendukung `waiting_approval`.
+- **Added**: Utilitas parsing perintah pengguna dan format pesan WA pada `lib/services/fonnteWebhookUtils.ts` (`parseUserBotAction`, `formatReportPreviewMessage`, `formatSubmitSuccessMessage`).
+- **Added**: Halaman khusus baru untuk Panel Admin pada `/admin` (`app/(dashboard)/admin/page.tsx`) dengan desain modern, banner dark-gradient, indikator status super admin, dan info callout yang elegan.
+- **Changed**: Memisahkan form pengaturan admin (`AdminReminderSettingsForm`) dari halaman Pengaturan Pengingat Pribadi (`/settings/reminder`), sehingga tampilan pengaturan user kembali bersih (*clean*), fokus, dan rapi.
+- **Added**: Menu navigasi "Admin" khusus akun administrator pada Sidebar desktop dan Bottom Navigation mobile (`components/layout/BottomNav.tsx`) serta tombol cepat "Panel Admin" pada Header (`components/layout/Header.tsx`).
+- **Added**: Unit test komprehensif pada `tests/fonnteWebhookRoute.test.ts` dan `tests/fonnteWebhookUtils.test.ts` untuk menguji alur draf persetujuan, submit dengan approval, generate ulang, dan pembatalan draf.
 - **Added**: Fitur penonaktifan reminder WhatsApp khusus hari akhir pekan / libur (`weekend_reminder_enabled`, default `false` agar libur di hari Sabtu & Minggu).
 - **Added**: Migration `20261011000001_add_weekend_reminder_enabled.sql` yang menambahkan kolom boolean `weekend_reminder_enabled` ke tabel `system_reminder_settings`.
 - **Added**: Kartu kontrol switch instan untuk "Reminder Weekend" pada form pengaturan admin (`AdminReminderSettingsForm.tsx`) lengkap dengan ikon `CalendarOff` Lucide, badge status, dan toggle instan via endpoint `PATCH`.

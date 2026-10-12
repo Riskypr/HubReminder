@@ -1,15 +1,24 @@
 // app/api/webhook/fonnte/route.ts
 // Webhook endpoint untuk menerima pesan masuk dari Fonnte.
-// Alur: user balas WA → Fonnte webhook → lookup user → Gemini generate → submit → konfirmasi.
+// Alur Baru:
+// 1. User kirim kegiatan di WA
+// 2. Bot generate draf laporan (Gemini AI) & simpan status 'waiting_approval'
+// 3. Bot kirim draf ke WA user & meminta persetujuan (KIRIM / ULANG / EDIT / BATAL)
+// 4. Laporan HANYA disubmit ke MagangHub setelah user konfirmasi setuju/kirim.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decryptSessionSecret } from '@/lib/utils/crypto';
-import { generateReport } from '@/lib/services/geminiService';
+import { generateReport, type GeneratedReport } from '@/lib/services/geminiService';
 import { submitReportToMagangHub } from '@/lib/services/reportSubmitService';
 import { updateSessionTokens } from '@/lib/services/accountService';
 import { getFoonteConfig, sendFoonteMessage } from '@/lib/services/foonteService';
-import { parseFoonteIncomingMessage, parseLinkCommand } from '@/lib/services/fonnteWebhookUtils';
+import {
+  parseFoonteIncomingMessage,
+  parseUserBotAction,
+  formatReportPreviewMessage,
+  formatSubmitSuccessMessage,
+} from '@/lib/services/fonnteWebhookUtils';
 import { getSystemReminderSettings } from '@/lib/services/systemReminderSettingsService';
 
 export const dynamic = 'force-dynamic';
@@ -47,15 +56,11 @@ async function replyToUser(phone: string, message: string) {
 }
 
 /**
- * Coba cocokkan nomor WA ke user_id.
- * Prioritas:
- * 1. Cek tabel wa_phone_mappings (sudah pernah di-link)
- * 2. Cari user dengan nama mirip dari pesan (fallback)
+ * Coba cocokkan nomor WA ke user_id dari wa_phone_mappings.
  */
 async function findUserByPhone(phone: string) {
   const supabase = createAdminClient();
 
-  // Hanya periksa mapping resmi di wa_phone_mappings (telah melakukan koneksi/link)
   const { data: mapping, error } = await supabase
     .from('wa_phone_mappings')
     .select('user_id')
@@ -73,7 +78,7 @@ async function findUserByPhone(phone: string) {
 
 /**
  * Link nomor WA ke user berdasarkan nama yang dikirim user.
- * User harus mengirim "link [nama di HubReminder]" untuk pertama kali.
+ * Format: "link [nama di HubReminder]"
  */
 async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
   userId?: string;
@@ -83,7 +88,6 @@ async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
   const supabase = createAdminClient();
   const searchName = nameInput.trim().toLowerCase();
 
-  // Cari profil dengan nama mirip
   const { data: profiles, error: profileError } = await supabase
     .from('profiles')
     .select('id, full_name')
@@ -114,7 +118,6 @@ async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
     };
   }
 
-  // Simpan mapping
   const { error: insertError } = await supabase
     .from('wa_phone_mappings')
     .upsert(
@@ -130,19 +133,10 @@ async function linkPhoneToUser(phone: string, nameInput: string): Promise<{
   return { userId: match.id, userName: match.full_name || nameInput };
 }
 
-export async function GET() {
-  return NextResponse.json({
-    status: 'online',
-    service: 'HubReminder Fonnte Webhook',
-    timestamp: new Date().toISOString(),
-  });
-}
-
 /** Robustly extract payload from JSON, FormData, or URL-encoded request body */
 async function extractPayload(request: NextRequest): Promise<Record<string, unknown>> {
   const contentType = (request.headers.get('content-type') || '').toLowerCase();
 
-  // 1. Try JSON if content-type matches
   if (contentType.includes('application/json')) {
     try {
       return await request.json();
@@ -151,7 +145,6 @@ async function extractPayload(request: NextRequest): Promise<Record<string, unkn
     }
   }
 
-  // 2. Try FormData (handles application/x-www-form-urlencoded & multipart/form-data)
   try {
     const formData = await request.formData();
     const result: Record<string, unknown> = {};
@@ -163,7 +156,6 @@ async function extractPayload(request: NextRequest): Promise<Record<string, unkn
     // fallback
   }
 
-  // 3. Try URLSearchParams / plain text parsing
   try {
     const text = await request.text();
     if (text) {
@@ -183,6 +175,206 @@ async function extractPayload(request: NextRequest): Promise<Record<string, unkn
   }
 
   return {};
+}
+
+/**
+ * Generate draf laporan menggunakan Gemini AI, simpan ke database dengan status 'waiting_approval',
+ * lalu kirim format preview ke WA user untuk meminta persetujuan.
+ */
+async function generateAndSendDraft(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  phone: string,
+  today: string,
+  userInput: string,
+  profile: { full_name?: string | null; company_name?: string | null; position?: string | null } | null,
+  isRegenerated = false,
+): Promise<{ ok: boolean; report?: GeneratedReport; error?: string }> {
+  await replyToUser(
+    phone,
+    isRegenerated
+      ? '⏳ Sedang meng-generate ulang laporan menggunakan AI...'
+      : '⏳ Sedang membuat draf laporan menggunakan AI...',
+  );
+
+  const genResult = await generateReport(userInput, {
+    name: profile?.full_name,
+    company: profile?.company_name,
+    position: profile?.position,
+  });
+
+  if (genResult.error || !genResult.report) {
+    await supabase
+      .from('wa_report_sessions')
+      .update({
+        status: 'failed',
+        error_message: genResult.error,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('report_date', today);
+
+    await replyToUser(
+      phone,
+      `❌ Gagal generate laporan: ${genResult.error}\n\nCoba kirim ulang rincian kegiatan kamu atau balas *ULANG*.`,
+    );
+    return { ok: false, error: genResult.error };
+  }
+
+  const report = genResult.report;
+
+  // Simpan draf laporan dengan status 'waiting_approval' (TIDAK langsung disubmit!)
+  const { error: saveError } = await supabase
+    .from('wa_report_sessions')
+    .update({
+      generated_report: report,
+      status: 'waiting_approval',
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('report_date', today);
+
+  if (saveError) {
+    console.error('[webhook/fonnte] Gagal simpan draf waiting_approval:', saveError);
+  }
+
+  // Kirim preview laporan ke WhatsApp user untuk konfirmasi/approval
+  const previewMsg = formatReportPreviewMessage(report, today, isRegenerated);
+  await replyToUser(phone, previewMsg);
+
+  return { ok: true, report };
+}
+
+/**
+ * Proses submit laporan ke MagangHub setelah disetujui oleh user.
+ */
+async function submitDraftReport(
+  supabase: ReturnType<typeof createAdminClient>,
+  userId: string,
+  phone: string,
+  today: string,
+  report: GeneratedReport,
+): Promise<{ ok: boolean; error?: string }> {
+  await replyToUser(phone, '⏳ Memproses pengiriman laporan ke MagangHub...');
+
+  // 1. Ambil sesi MagangHub user
+  const { data: sessionData } = await supabase
+    .from('maganghub_sessions')
+    .select('encrypted_session, encrypted_refresh_token, status')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!sessionData || sessionData.status === 'expired' || !sessionData.encrypted_session) {
+    await supabase
+      .from('wa_report_sessions')
+      .update({
+        status: 'failed',
+        error_message: 'Sesi MagangHub expired',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('report_date', today);
+
+    await replyToUser(
+      phone,
+      `⚠️ Sesi MagangHub kamu sudah kedaluwarsa atau belum terhubung.\n\nSilakan perbarui sesi login MagangHub di:\n${process.env.APP_URL || 'https://hub-reminder.vercel.app'}\n\nSetelah memperbarui sesi, balas *KIRIM* kembali.`,
+    );
+    return { ok: false, error: 'session_expired' };
+  }
+
+  // 2. Dekripsi sesi
+  let cookiePlaintext: string;
+  try {
+    const accessToken = await decryptSessionSecret(sessionData.encrypted_session);
+    const refreshToken = sessionData.encrypted_refresh_token
+      ? await decryptSessionSecret(sessionData.encrypted_refresh_token)
+      : null;
+    cookiePlaintext = refreshToken ? JSON.stringify({ accessToken, refreshToken }) : accessToken;
+  } catch {
+    await supabase
+      .from('wa_report_sessions')
+      .update({
+        status: 'failed',
+        error_message: 'Gagal dekripsi sesi',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('report_date', today);
+
+    await replyToUser(
+      phone,
+      '❌ Gagal mengakses sesi login MagangHub. Coba perbarui sesi di dashboard HubReminder.',
+    );
+    return { ok: false, error: 'decrypt_failed' };
+  }
+
+  // 3. Update status ke submitting
+  await supabase
+    .from('wa_report_sessions')
+    .update({
+      status: 'submitting',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('report_date', today);
+
+  // 4. Submit ke MagangHub API
+  const submitResult = await submitReportToMagangHub(
+    cookiePlaintext,
+    report,
+    userId,
+    (accessToken, refreshToken) => updateSessionTokens(userId, accessToken, refreshToken),
+  );
+
+  if (submitResult.ok) {
+    const nowIso = new Date().toISOString();
+    await supabase
+      .from('wa_report_sessions')
+      .update({
+        status: 'submitted',
+        submitted_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq('user_id', userId)
+      .eq('report_date', today);
+
+    await replyToUser(phone, formatSubmitSuccessMessage(report));
+    return { ok: true };
+  }
+
+  // Submit gagal: kembalikan ke status waiting_approval agar user bisa coba lagi atau copy-paste
+  await supabase
+    .from('wa_report_sessions')
+    .update({
+      status: 'waiting_approval',
+      error_message: submitResult.error,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('report_date', today);
+
+  if (submitResult.isSessionExpired) {
+    await supabase
+      .from('maganghub_sessions')
+      .update({ status: 'expired', updated_at: new Date().toISOString() })
+      .eq('user_id', userId);
+  }
+
+  await replyToUser(
+    phone,
+    `⚠️ Gagal submit otomatis ke MagangHub: ${submitResult.error}\n\n*Kamu bisa copy-paste laporan ini langsung ke MagangHub:*\nhttps://monev.maganghub.kemnaker.go.id/dashboard\n\n*Aktivitas:*\n${report.activity}\n\n*Pelajaran:*\n${report.lesson}\n\n*Kendala:*\n${report.challenge}\n\nAtau periksa koneksi lalu balas *KIRIM* kembali.`,
+  );
+
+  return { ok: false, error: submitResult.error };
+}
+
+export async function GET() {
+  return NextResponse.json({
+    status: 'online',
+    service: 'HubReminder Fonnte Webhook (With Approval Flow)',
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -210,51 +402,27 @@ export async function POST(request: NextRequest) {
   }
 
   const { phone, message, isGroup } = incoming;
-
   console.log('[webhook/fonnte] Parsed incoming:', { phone, message: message.slice(0, 100), isGroup });
 
-  // === COMMAND: link [nama] — link nomor WA ke akun HubReminder ===
-  const nameInput = parseLinkCommand(message);
-  if (nameInput) {
-    const result = await linkPhoneToUser(phone, nameInput);
+  const action = parseUserBotAction(message);
+
+  // === 1. COMMAND: link [nama] ===
+  if (action.type === 'link') {
+    const result = await linkPhoneToUser(phone, action.name);
     if (result.error) {
       await replyToUser(phone, result.error);
     } else {
-      await replyToUser(phone, `✅ Nomor WA kamu berhasil dihubungkan ke akun *${result.userName}*.\n\nSekarang kamu bisa balas pesan ini kapan saja dengan kegiatan magang kamu untuk auto-generate laporan.\n\nContoh: "hari ini belajar react dan bikin komponen dashboard"`);
+      await replyToUser(
+        phone,
+        `✅ Nomor WA kamu berhasil dihubungkan ke akun *${result.userName}*.\n\nSekarang kamu bisa balas pesan ini kapan saja dengan kegiatan magang kamu untuk membuat draf laporan.\n\nContoh: "hari ini belajar react dan membuat komponen dashboard"`,
+      );
     }
     return NextResponse.json({ ok: true, action: 'link' });
   }
 
-  // === COMMAND: status — cek status laporan hari ini ===
-  if (/^status$/i.test(message)) {
-    const userId = await findUserByPhone(phone);
-    if (!userId) {
-      await replyToUser(phone, '⚠️ Nomor WA kamu belum terhubung.\nBalas: link [nama lengkap kamu]');
-      return NextResponse.json({ ok: true, action: 'status_unlinked' });
-    }
-    const supabase = createAdminClient();
-    const today = todayWIB();
-    const { data: session } = await supabase
-      .from('wa_report_sessions')
-      .select('status, submitted_at')
-      .eq('user_id', userId)
-      .eq('report_date', today)
-      .maybeSingle();
-
-    const statusText = session
-      ? session.status === 'submitted'
-        ? `✅ Laporan hari ini sudah dikirim pada ${session.submitted_at}.`
-        : `📋 Status: ${session.status}`
-      : '📝 Belum ada laporan hari ini. Balas dengan kegiatan magang kamu untuk generate otomatis.';
-
-    await replyToUser(phone, statusText);
-    return NextResponse.json({ ok: true, action: 'status' });
-  }
-
-  // === MAIN: Auto-generate laporan dari input kegiatan ===
+  // Cek apakah nomor WA sudah terhubung
   const userId = await findUserByPhone(phone);
   if (!userId) {
-    // Abaikan pesan biasa dari nomor yang belum terhubung/koneksi agar tidak mengganggu/kirim spam
     console.log(`[webhook/fonnte] Mengabaikan pesan dari nomor belum terhubung (${phone})`);
     return NextResponse.json({ ok: true, skipped: 'unlinked_user_ignored' });
   }
@@ -262,38 +430,76 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient();
   const today = todayWIB();
 
-  // Cek apakah sudah submit hari ini
+  // === 2. COMMAND: status ===
+  if (action.type === 'status') {
+    const { data: session } = await supabase
+      .from('wa_report_sessions')
+      .select('status, submitted_at, generated_report')
+      .eq('user_id', userId)
+      .eq('report_date', today)
+      .maybeSingle();
+
+    let statusText: string;
+    if (session?.status === 'submitted') {
+      statusText = `✅ Laporan hari ini sudah terkirim ke MagangHub pada ${session.submitted_at}.`;
+    } else if (session?.status === 'waiting_approval' && session?.generated_report) {
+      statusText = `📋 Draf laporan kamu sudah siap dan sedang *menunggu persetujuan*.\n\nPilihan balasan:\n• *KIRIM* ➔ Submit ke MagangHub\n• *ULANG* ➔ Generate ulang AI\n• *EDIT [teks]* ➔ Ubah rincian\n• *BATAL* ➔ Batalkan draf`;
+    } else if (session) {
+      statusText = `📋 Status laporan hari ini: ${session.status}`;
+    } else {
+      statusText = '📝 Belum ada laporan hari ini. Balas dengan rincian kegiatan magang kamu untuk membuat draf laporan.';
+    }
+
+    await replyToUser(phone, statusText);
+    return NextResponse.json({ ok: true, action: 'status' });
+  }
+
+  // === 3. COMMAND: batal / batalkan ===
+  if (action.type === 'cancel') {
+    const { data: session } = await supabase
+      .from('wa_report_sessions')
+      .select('status')
+      .eq('user_id', userId)
+      .eq('report_date', today)
+      .maybeSingle();
+
+    if (session?.status === 'waiting_approval') {
+      await supabase
+        .from('wa_report_sessions')
+        .update({
+          status: 'waiting_input',
+          generated_report: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .eq('report_date', today);
+
+      await replyToUser(
+        phone,
+        '❌ Draf laporan hari ini telah dibatalkan. Kamu bisa mengirimkan kegiatan baru kapan saja.',
+      );
+      return NextResponse.json({ ok: true, action: 'cancelled' });
+    }
+
+    await replyToUser(phone, 'ℹ️ Tidak ada draf laporan aktif yang sedang menunggu persetujuan.');
+    return NextResponse.json({ ok: true, action: 'cancel_ignored' });
+  }
+
+  // Ambil sesi laporan hari ini
   const { data: existingSession } = await supabase
     .from('wa_report_sessions')
-    .select('status')
+    .select('*')
     .eq('user_id', userId)
     .eq('report_date', today)
     .maybeSingle();
 
+  // Jika laporan sudah berstatus 'submitted' hari ini
   if (existingSession?.status === 'submitted') {
-    await replyToUser(phone, '✅ Laporan hari ini sudah terkirim sebelumnya. Tidak perlu mengisi ulang.');
-    return NextResponse.json({ ok: true, action: 'already_submitted' });
-  }
-
-  // Buat / update sesi
-  const { error: upsertError } = await supabase
-    .from('wa_report_sessions')
-    .upsert(
-      {
-        user_id: userId,
-        wa_number: phone,
-        report_date: today,
-        user_input: message,
-        status: 'generating',
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,report_date' },
+    await replyToUser(
+      phone,
+      '✅ Laporan hari ini sudah terkirim ke MagangHub sebelumnya. Tidak perlu mengisi ulang.',
     );
-
-  if (upsertError) {
-    console.error('[webhook/fonnte] Gagal upsert session:', upsertError);
-    await replyToUser(phone, '❌ Terjadi kesalahan saat memproses pesan kamu. Coba lagi nanti.');
-    return NextResponse.json({ ok: false, error: 'session_upsert_failed' }, { status: 500 });
+    return NextResponse.json({ ok: true, action: 'already_submitted' });
   }
 
   // Ambil profil user untuk konteks Gemini
@@ -303,121 +509,122 @@ export async function POST(request: NextRequest) {
     .eq('id', userId)
     .maybeSingle();
 
-  await replyToUser(phone, '⏳ Sedang meng-generate laporan menggunakan AI...');
+  // === 4. COMMAND: approve (KIRIM / YA / OKE / SETUJU) ===
+  if (action.type === 'approve') {
+    if (!existingSession || existingSession.status !== 'waiting_approval' || !existingSession.generated_report) {
+      await replyToUser(
+        phone,
+        '⚠️ Tidak ada draf laporan yang sedang menunggu persetujuan hari ini.\n\nKirimkan rincian kegiatan magang kamu terlebih dahulu untuk membuat draf laporan.',
+      );
+      return NextResponse.json({ ok: true, action: 'approve_no_draft' });
+    }
 
-  // 1. Generate laporan dengan Gemini AI
-  const genResult = await generateReport(message, {
-    name: profile?.full_name,
-    company: profile?.company_name,
-    position: profile?.position,
-  });
-
-  if (genResult.error || !genResult.report) {
-    await supabase
-      .from('wa_report_sessions')
-      .update({ status: 'failed', error_message: genResult.error, updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('report_date', today);
-    await replyToUser(phone, `❌ Gagal generate laporan: ${genResult.error}\n\nCoba kirim ulang kegiatan kamu.`);
-    return NextResponse.json({ ok: false, error: 'generation_failed' });
-  }
-
-  const report = genResult.report;
-
-  // Simpan hasil generate
-  await supabase
-    .from('wa_report_sessions')
-    .update({
-      generated_report: report,
-      status: 'submitting',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-    .eq('report_date', today);
-
-  // 2. Ambil sesi MagangHub user
-  const { data: sessionData } = await supabase
-    .from('maganghub_sessions')
-    .select('encrypted_session, encrypted_refresh_token, status')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (!sessionData || sessionData.status === 'expired' || !sessionData.encrypted_session) {
-    await supabase
-      .from('wa_report_sessions')
-      .update({ status: 'failed', error_message: 'Sesi MagangHub expired', updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('report_date', today);
-    await replyToUser(
+    const submitRes = await submitDraftReport(
+      supabase,
+      userId,
       phone,
-      `📝 Laporan berhasil di-generate, tapi sesi MagangHub kamu sudah kedaluwarsa.\n\nSilahkan perbarui sesi di:\n${process.env.APP_URL || 'https://hub-reminder.vercel.app'}\n\n*Preview laporan:*\n\n*Aktivitas:*\n${report.activity}\n\n*Pelajaran:*\n${report.lesson}\n\n*Kendala:*\n${report.challenge}`,
+      today,
+      existingSession.generated_report as GeneratedReport,
     );
-    return NextResponse.json({ ok: false, error: 'session_expired' });
+    return NextResponse.json({ ok: submitRes.ok, action: submitRes.ok ? 'submitted' : 'submit_failed' });
   }
 
-  let cookiePlaintext: string;
-  try {
-    const accessToken = await decryptSessionSecret(sessionData.encrypted_session);
-    const refreshToken = sessionData.encrypted_refresh_token
-      ? await decryptSessionSecret(sessionData.encrypted_refresh_token)
-      : null;
-    cookiePlaintext = refreshToken ? JSON.stringify({ accessToken, refreshToken }) : accessToken;
-  } catch {
-    await supabase
+  // === 5. COMMAND: regenerate (ULANG / REGEN) ===
+  if (action.type === 'regenerate') {
+    if (!existingSession || !existingSession.user_input) {
+      await replyToUser(
+        phone,
+        '⚠️ Belum ada kegiatan magang yang tersimpan untuk di-generate ulang. Silakan kirimkan kegiatan magang kamu hari ini.',
+      );
+      return NextResponse.json({ ok: true, action: 'regenerate_no_input' });
+    }
+
+    const genRes = await generateAndSendDraft(
+      supabase,
+      userId,
+      phone,
+      today,
+      existingSession.user_input,
+      profile,
+      true,
+    );
+    return NextResponse.json({ ok: genRes.ok, action: genRes.ok ? 'regenerated' : 'generation_failed' });
+  }
+
+  // === 6. COMMAND: edit [isi baru] / revisi [isi baru] ===
+  if (action.type === 'edit') {
+    if (!action.newContent) {
+      await replyToUser(
+        phone,
+        '✏️ *Cara Mengubah Draf Laporan:*\nBalas pesan dengan format:\n*EDIT [kegiatan baru kamu]*\n\nContoh:\n*EDIT Hari ini saya membuat modul autentikasi dan memperbaiki bug navigasi*',
+      );
+      return NextResponse.json({ ok: true, action: 'edit_prompt' });
+    }
+
+    // Upsert sesi dengan input kegiatan baru
+    const { error: upsertError } = await supabase
       .from('wa_report_sessions')
-      .update({ status: 'failed', error_message: 'Gagal dekripsi sesi', updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('report_date', today);
-    await replyToUser(phone, '❌ Gagal mengakses sesi MagangHub. Coba perbarui sesi di dashboard HubReminder.');
-    return NextResponse.json({ ok: false, error: 'decrypt_failed' });
+      .upsert(
+        {
+          user_id: userId,
+          wa_number: phone,
+          report_date: today,
+          user_input: action.newContent,
+          status: 'generating',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,report_date' },
+      );
+
+    if (upsertError) {
+      console.error('[webhook/fonnte] Gagal upsert session edit:', upsertError);
+      await replyToUser(phone, '❌ Terjadi kesalahan saat memproses masukan kamu. Coba lagi nanti.');
+      return NextResponse.json({ ok: false, error: 'session_upsert_failed' }, { status: 500 });
+    }
+
+    const genRes = await generateAndSendDraft(
+      supabase,
+      userId,
+      phone,
+      today,
+      action.newContent,
+      profile,
+      false,
+    );
+    return NextResponse.json({ ok: genRes.ok, action: genRes.ok ? 'edited' : 'generation_failed' });
   }
 
-  // 3. Submit ke MagangHub
-  const submitResult = await submitReportToMagangHub(
-    cookiePlaintext,
-    report,
+  // === 7. INPUT KEGIATAN: Buat draf baru & tunggu persetujuan user ===
+  const inputMessage = action.content;
+  const { error: upsertError } = await supabase
+    .from('wa_report_sessions')
+    .upsert(
+      {
+        user_id: userId,
+        wa_number: phone,
+        report_date: today,
+        user_input: inputMessage,
+        status: 'generating',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,report_date' },
+    );
+
+  if (upsertError) {
+    console.error('[webhook/fonnte] Gagal upsert session input:', upsertError);
+    await replyToUser(phone, '❌ Terjadi kesalahan saat memproses pesan kamu. Coba lagi nanti.');
+    return NextResponse.json({ ok: false, error: 'session_upsert_failed' }, { status: 500 });
+  }
+
+  const genRes = await generateAndSendDraft(
+    supabase,
     userId,
-    (accessToken, refreshToken) => updateSessionTokens(userId, accessToken, refreshToken),
-  );
-
-  if (submitResult.ok) {
-    const nowIso = new Date().toISOString();
-    await supabase
-      .from('wa_report_sessions')
-      .update({ status: 'submitted', submitted_at: nowIso, updated_at: nowIso })
-      .eq('user_id', userId)
-      .eq('report_date', today);
-
-    await replyToUser(
-      phone,
-      `✅ *Laporan berhasil dikirim ke MagangHub!*\n\n*Aktivitas:*\n${report.activity}\n\n*Pelajaran:*\n${report.lesson}\n\n*Kendala:*\n${report.challenge}\n\n_Laporan di-generate otomatis oleh AI berdasarkan input kamu._`,
-    );
-    return NextResponse.json({ ok: true, action: 'submitted' });
-  }
-
-  // Submit gagal
-  await supabase
-    .from('wa_report_sessions')
-    .update({
-      status: 'failed',
-      error_message: submitResult.error,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', userId)
-    .eq('report_date', today);
-
-  if (submitResult.isSessionExpired) {
-    await supabase
-      .from('maganghub_sessions')
-      .update({ status: 'expired', updated_at: new Date().toISOString() })
-      .eq('user_id', userId);
-  }
-
-  // Tetap kirim preview laporan agar user bisa copy-paste manual
-  await replyToUser(
     phone,
-    `⚠️ Laporan berhasil di-generate tapi gagal submit otomatis: ${submitResult.error}\n\n*Kamu bisa copy-paste laporan di bawah ini ke MagangHub:*\nhttps://monev.maganghub.kemnaker.go.id/dashboard\n\n*Aktivitas:*\n${report.activity}\n\n*Pelajaran:*\n${report.lesson}\n\n*Kendala:*\n${report.challenge}`,
+    today,
+    inputMessage,
+    profile,
+    false,
   );
 
-  return NextResponse.json({ ok: false, error: 'submit_failed', detail: submitResult.error });
+  return NextResponse.json({ ok: genRes.ok, action: genRes.ok ? 'draft_created' : 'generation_failed' });
 }
