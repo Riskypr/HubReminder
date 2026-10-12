@@ -12,7 +12,8 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
   - Balas `BATAL` untuk membatalkan draf laporan aktif hari ini.
 - **Added**: Migration `20261012000001_add_waiting_approval_status.sql` untuk memperluas constraint status tabel `public.wa_report_sessions` agar mendukung `waiting_approval`.
 - **Added**: Utilitas parsing perintah pengguna dan format pesan WA pada `lib/services/fonnteWebhookUtils.ts` (`parseUserBotAction`, `formatReportPreviewMessage`, `formatSubmitSuccessMessage`).
-- **Added**: Halaman khusus baru untuk Panel Admin pada `/admin` (`app/(dashboard)/admin/page.tsx`) dengan desain modern, banner dark-gradient, indikator status super admin, dan info callout yang elegan.
+- **Added**: Halaman khusus baru untuk Panel Admin pada `/admin` (`app/(dashboard)/admin/page.tsx`) dengan desain modern, tata letak solid yang bersih, badge status admin, dan info callout yang elegan.
+- **Changed**: Gradient brand pada tombol dan elemen UI diseragamkan ke `135deg, #0759d8, #0344b8` (tombol Panel Admin di Header, tombol navigasi di Pengaturan, icon badges). Gradient dekoratif pada latar/kartu netral diganti warna solid agar keterbacaan tetap terjaga.
 - **Changed**: Memisahkan form pengaturan admin (`AdminReminderSettingsForm`) dari halaman Pengaturan Pengingat Pribadi (`/settings/reminder`), sehingga tampilan pengaturan user kembali bersih (*clean*), fokus, dan rapi.
 - **Added**: Menu navigasi "Admin" khusus akun administrator pada Sidebar desktop dan Bottom Navigation mobile (`components/layout/BottomNav.tsx`) serta tombol cepat "Panel Admin" pada Header (`components/layout/Header.tsx`).
 - **Added**: Unit test komprehensif pada `tests/fonnteWebhookRoute.test.ts` dan `tests/fonnteWebhookUtils.test.ts` untuk menguji alur draf persetujuan, submit dengan approval, generate ulang, dan pembatalan draf.

@@ -58,11 +58,11 @@ export default function Header({ title = 'HubReminder', isAdmin = false }: Heade
           {isAdmin && (
             <Link
               href="/admin"
-              className="group inline-flex items-center gap-1.5 rounded-2xl border border-indigo-200 bg-indigo-50/90 px-3 py-2 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-100 hover:border-indigo-300"
+              className="group inline-flex items-center gap-1.5 rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-primary/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:shadow-primary/30 hover:brightness-105 active:translate-y-0 active:scale-[0.98]"
               title="Panel Admin"
               id="header-open-admin"
             >
-              <ShieldCheck size={14} className="text-indigo-600" aria-hidden="true" />
+              <ShieldCheck size={14} aria-hidden="true" />
               <span className="hidden sm:inline">Panel Admin</span>
             </Link>
           )}

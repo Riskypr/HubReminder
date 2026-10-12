@@ -53,29 +53,30 @@ export default async function ReminderSettingsPage() {
       <ReminderSettingsForm initialSettings={settings} />
 
       {isAdmin && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/70 via-blue-50/50 to-white p-4.5 sm:flex-row sm:items-center sm:justify-between sm:p-5 shadow-xs">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4.5 sm:flex-row sm:items-center sm:justify-between sm:p-5 shadow-xs">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/20">
               <ShieldCheck size={20} aria-hidden="true" />
             </span>
             <div>
-              <h3 className="text-xs font-bold text-indigo-950 sm:text-sm">
+              <h3 className="text-xs font-bold text-text-primary sm:text-sm">
                 Pengaturan Sistem &amp; Bot WhatsApp Admin
               </h3>
-              <p className="text-[11px] text-indigo-700/80 sm:text-xs">
+              <p className="text-[11px] text-text-secondary sm:text-xs">
                 Pengaturan global admin kini dipisahkan ke menu khusus agar tampilan pengaturan akun tetap clean dan fokus.
               </p>
             </div>
           </div>
           <Link
             href="/admin"
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700 active:scale-95"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-primary/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105 active:translate-y-0 active:scale-[0.99]"
           >
             <span>Buka Panel Admin</span>
             <ArrowRight size={14} aria-hidden="true" />
           </Link>
         </div>
       )}
+
     </div>
   );
 }

@@ -97,7 +97,7 @@ export default function AdminReminderSettingsForm({ initialSettings }: { initial
       {/* Header Panel Admin */}
       <div className="flex flex-col gap-3 pb-4 border-b border-slate-200/80 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-primary text-white shadow-md shadow-primary/20">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0759d8,#0344b8)] text-white shadow-md shadow-primary/20">
             <ShieldCheck size={22} aria-hidden="true" />
           </span>
           <div>
