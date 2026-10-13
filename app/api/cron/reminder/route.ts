@@ -16,7 +16,7 @@ export const runtime = 'nodejs';
 type SessionRow = { user_id: string; status: 'valid' | 'expired' | 'unverified'; updated_at: string; encrypted_session: string; profiles: { full_name: string | null; timezone?: string | null } | null };
 type CheckRow = { user_id: string; status: AttendanceStatus; checked_at: string };
 type SettingsRow = { user_id: string; enabled: boolean; max_reminders_per_day: number; interval_seconds: number; interval_minutes: number; reminder_times: string[]; snooze_until: string | null };
-type NotificationRow = { user_id: string; sent_at: string };
+type NotificationRow = { user_id: string; sent_at: string; channel?: 'push' | 'whatsapp' };
 type CookieLogRow = { user_id: string; sent_at: string; session_updated_at: string; status: 'sent' | 'failed' };
 type ProviderFailure = { status: number; reason: string };
 
@@ -34,7 +34,7 @@ function jakartaSeconds(date: Date) {
   return get('hour') * 3600 + get('minute') * 60 + get('second');
 }
 
-function isGlobalReminderDue(now: Date, startTime: string, intervalSeconds: number) {
+export function isGlobalReminderDue(now: Date, startTime: string, intervalSeconds: number) {
   const [hour, minute] = startTime.split(':').map(Number);
   const elapsed = jakartaSeconds(now) - (hour * 3600 + minute * 60);
   // cron-job.org runs once per minute; allow a little execution delay around the scheduled minute.
@@ -187,44 +187,28 @@ async function handleReminder(request: NextRequest) {
     let adminSettings = DEFAULT_SYSTEM_REMINDER_SETTINGS;
     try { adminSettings = await getSystemReminderSettings(supabase); } catch { /* allows deploy before migration */ }
 
-    // 1. Jika bot WA dinonaktifkan oleh admin, jangan kirim pesan apapun ke WhatsApp
-    if (!adminSettings.wa_bot_enabled) {
-      return NextResponse.json({
-        success: true,
-        sent: false,
-        reason: 'wa_bot_disabled',
-        detail: 'Layanan Bot WhatsApp dinonaktifkan oleh admin.',
-        waBotEnabled: false,
-        weekendReminderEnabled: adminSettings.weekend_reminder_enabled,
-        reminderTogetherEnabled: adminSettings.reminder_together_enabled,
-      });
-    }
-
     const now = new Date();
 
-    // 2. Jika hari ini akhir pekan (Sabtu & Minggu) dan reminder weekend dinonaktifkan karena libur
     const jakartaDayOfWeek = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Jakarta',
       weekday: 'short',
     }).format(now);
     const isWeekend = jakartaDayOfWeek === 'Sat' || jakartaDayOfWeek === 'Sun';
 
-    if (isWeekend && !adminSettings.weekend_reminder_enabled) {
-      return NextResponse.json({
-        success: true,
-        sent: false,
-        reason: 'weekend_reminder_disabled',
-        detail: 'Pengiriman reminder WhatsApp dinonaktifkan pada hari libur akhir pekan (Sabtu & Minggu).',
-        waBotEnabled: adminSettings.wa_bot_enabled,
-        weekendReminderEnabled: false,
-        reminderTogetherEnabled: adminSettings.reminder_together_enabled,
-      });
-    }
+    const isWaBotActive = !!adminSettings.wa_bot_enabled;
+    const isWeekendAllowed = !isWeekend || !!adminSettings.weekend_reminder_enabled;
+    const isWaAllowed = isWaBotActive && isWeekendAllowed;
 
-    const foonte = getFoonteConfig();
-    const targets = getFoonteTargets();
-    if (!targets.length) throw new Error('Konfigurasikan FOONTE_WA_GROUP_ID atau FOONTE_WA_TARGETS');
-    const globalDue = isGlobalReminderDue(now, adminSettings.start_time, adminSettings.interval_seconds);
+    let foonte: ReturnType<typeof getFoonteConfig> | null = null;
+    let targets: string[] = [];
+    if (isWaAllowed) {
+      try {
+        foonte = getFoonteConfig();
+        targets = getFoonteTargets();
+      } catch (err) {
+        console.warn('[cron/reminder] Gagal inisialisasi Foonte:', err);
+      }
+    }
 
     const { data: sessionData, error: sessionError } = await supabase
       .from('maganghub_sessions').select('user_id, status, updated_at, encrypted_session, profiles(full_name, timezone)');
@@ -244,7 +228,8 @@ async function handleReminder(request: NextRequest) {
     for (const check of (checks ?? []) as CheckRow[]) {
       if (!latestTodayStatusByUser.has(check.user_id)) {
         const session = eligibleSessions.find((s) => s.user_id === check.user_id);
-        const tz = session?.profiles?.timezone || 'Asia/Jakarta';
+        const profileData = Array.isArray(session?.profiles) ? session?.profiles[0] : session?.profiles;
+        const tz = profileData?.timezone || 'Asia/Jakarta';
         if (isTodayInTz(check.checked_at, tz)) {
           latestTodayStatusByUser.set(check.user_id, check.status);
         }
@@ -254,7 +239,7 @@ async function handleReminder(request: NextRequest) {
     const ids = sessions.map((session) => session.user_id);
     const [{ data: settingsData, error: settingsError }, { data: notificationData, error: notificationError }, { data: cookieLogData, error: cookieLogError }] = await Promise.all([
       supabase.from('reminder_settings').select('user_id, enabled, max_reminders_per_day, interval_seconds, interval_minutes, reminder_times, snooze_until').in('user_id', ids),
-      supabase.from('notification_logs').select('user_id, sent_at').eq('channel', 'whatsapp').in('user_id', ids),
+      supabase.from('notification_logs').select('user_id, sent_at, channel').in('user_id', ids),
       supabase.from('cookie_warning_logs').select('user_id, sent_at, session_updated_at, status').in('user_id', ids),
     ]);
     if (settingsError) throw new Error(`Gagal mengambil pengaturan reminder: ${settingsError.message}`);
@@ -264,67 +249,71 @@ async function handleReminder(request: NextRequest) {
     const notificationRows = (notificationData ?? []) as NotificationRow[];
     const cookieLogs = (cookieLogData ?? []) as CookieLogRow[];
 
-    const scheduleUpdatedAt = adminSettings.updated_at ? Date.parse(adminSettings.updated_at) : 0;
-    const lastReminderAfterScheduleChange = notificationRows
-      .filter((log) => Date.parse(log.sent_at) >= scheduleUpdatedAt)
-      .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
-    const bulkIntervalElapsed = !lastReminderAfterScheduleChange ||
-      now.getTime() - lastReminderAfterScheduleChange >= adminSettings.interval_seconds * 1000;
+    const waNotificationRows = notificationRows.filter((log) => log.channel === 'whatsapp');
+    const pushNotificationRows = notificationRows.filter((log) => log.channel === 'push');
 
-    // Hitung total eksekusi pengiriman reminder WA hari ini ke WhatsApp (proteksi kuota Foonte)
+    // 1. Jadwal Pengingat WhatsApp Grup (Admin Bulk Mode)
     const todayJakarta = localDate(now, 'Asia/Jakarta');
-    const distinctSendRunsToday = new Set(
-      notificationRows
+    const distinctWaRunsToday = new Set(
+      waNotificationRows
         .filter((log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta)
         .map((log) => log.sent_at)
     ).size;
-    const adminDailyQuotaReached = distinctSendRunsToday >= adminSettings.max_reminders_per_day;
+    const adminDailyQuotaReached = distinctWaRunsToday >= adminSettings.max_reminders_per_day;
 
-    // Status apakah reminder bersama dinonaktifkan
-    const reminderTogetherDisabled = adminSettings.reminder_mode === 'bulk' && !adminSettings.reminder_together_enabled;
+    const lastWaRunTime = waNotificationRows
+      .filter((log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta)
+      .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
 
-    // Evaluasi apakah reminder berpotensi dikirim saat ini
-    const isPotentiallyDue = !adminDailyQuotaReached && !reminderTogetherDisabled;
+    const adminIntervalElapsed = !lastWaRunTime ||
+      now.getTime() - lastWaRunTime >= adminSettings.interval_seconds * 1000;
 
-    // LIVE VERIFICATION: Jika reminder berpotensi dikirim saat ini, verifikasi peserta
-    // yang belum tercatat 'selesai' hari ini langsung ke MagangHub untuk mencegah
-    // nama peserta yang SUDAH absen keliru dikirim sebagai belum absen!
-    if (isPotentiallyDue) {
-      const candidatesToVerify = eligibleSessions.filter((session) => {
-        return latestTodayStatusByUser.get(session.user_id) !== 'selesai';
-      });
+    const [adminStartHour = 8, adminStartMinute = 0] = adminSettings.start_time.split(':').map(Number);
+    const adminStartSeconds = adminStartHour * 3600 + adminStartMinute * 60;
+    const currentJakartaSec = jakartaSeconds(now);
+    const adminStartTimeReached = currentJakartaSec >= adminStartSeconds;
 
-      if (candidatesToVerify.length > 0) {
-        const concurrency = 4;
-        for (let index = 0; index < candidatesToVerify.length; index += concurrency) {
-          const batch = candidatesToVerify.slice(index, index + concurrency);
-          await Promise.allSettled(
-            batch.map(async (session) => {
-              try {
-                const plaintext = await decryptSessionSecret(session.encrypted_session);
-                if (!plaintext) return;
-                const checkResult = await checkAndUpdateAttendance(session.user_id, plaintext, supabase);
-                if (checkResult.success && checkResult.status !== 'unknown') {
-                  latestTodayStatusByUser.set(session.user_id, checkResult.status);
-                }
-              } catch (verifyError) {
-                console.warn(`[cron/reminder] Live verification gagal untuk peserta ${session.user_id}:`, verifyError);
+    const isBulkReminderDue = isWaAllowed &&
+      adminSettings.reminder_mode === 'bulk' &&
+      adminSettings.reminder_together_enabled &&
+      !adminDailyQuotaReached &&
+      adminStartTimeReached &&
+      adminIntervalElapsed;
+
+    // LIVE VERIFICATION: Verifikasi peserta yang belum tercatat 'selesai' hari ini langsung ke MagangHub
+    const candidatesToVerify = eligibleSessions.filter((session) => {
+      return latestTodayStatusByUser.get(session.user_id) !== 'selesai';
+    });
+
+    if (candidatesToVerify.length > 0) {
+      const concurrency = 4;
+      for (let index = 0; index < candidatesToVerify.length; index += concurrency) {
+        const batch = candidatesToVerify.slice(index, index + concurrency);
+        await Promise.allSettled(
+          batch.map(async (session) => {
+            try {
+              const plaintext = await decryptSessionSecret(session.encrypted_session);
+              if (!plaintext) return;
+              const checkResult = await checkAndUpdateAttendance(session.user_id, plaintext, supabase);
+              if (checkResult.success && checkResult.status !== 'unknown') {
+                latestTodayStatusByUser.set(session.user_id, checkResult.status);
               }
-            })
-          );
-        }
+            } catch (verifyError) {
+              console.warn(`[cron/reminder] Live verification gagal untuk peserta ${session.user_id}:`, verifyError);
+            }
+          })
+        );
       }
     }
 
     // Ambil daftar peserta yang BENAR-BENAR belum lapor untuk hari ini
-    // Jika status belum diketahui (undefined/unknown), anggap belum lapor agar tidak terlewat.
     const unreportedSessions = eligibleSessions.filter((session) => {
       const status = latestTodayStatusByUser.get(session.user_id);
       return status !== 'selesai' && status !== 'session_expired';
     });
 
-    // Evaluasi peserta yang jatuh tempo reminder berdasarkan preferensi waktu masing-masing
-    const userDueSessions = unreportedSessions.filter((session) => {
+    // 2. Evaluasi Web Push per peserta berdasarkan preferensi jadwal personal masing-masing
+    const userDuePushSessions = unreportedSessions.filter((session) => {
       const settings = settingsByUser.get(session.user_id) ?? {
         user_id: session.user_id,
         enabled: true,
@@ -338,23 +327,67 @@ async function handleReminder(request: NextRequest) {
       const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
       const timezone = profileData?.timezone || 'Asia/Jakarta';
       const today = localDate(now, timezone);
-      const userTodayLogs = notificationRows.filter(
+      const userTodayPushLogs = pushNotificationRows.filter(
         (log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today
       );
       return isParticipantReminderDue({
         settings,
         userTimezone: timezone,
-        userTodayLogs,
+        userTodayLogs: userTodayPushLogs,
         now,
       });
     });
 
-    // Mode bulk & single: kirim reminder bagi peserta yang sedang jatuh tempo sesuai jadwal masing-masing
-    const dueReportSessions = (adminDailyQuotaReached || reminderTogetherDisabled) ? [] : userDueSessions;
+    // 3. Evaluasi sesi untuk pengiriman WhatsApp:
+    // - Mode bulk: ikuti jadwal admin (start_time, interval, quota), kompilasi semua peserta belum lapor (tidak di-snooze)
+    const bulkReportSessions = unreportedSessions.filter((session) => {
+      const settings = settingsByUser.get(session.user_id);
+      if (!settings) return true;
+      if (!settings.enabled) return false;
+      const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+      const timezone = profileData?.timezone || 'Asia/Jakarta';
+      const today = localDate(now, timezone);
+      if (settings.snooze_until === today) return false;
+      return true;
+    });
+
+    // - Mode single: ikuti jadwal personal masing-masing peserta yang sedang jatuh tempo
+    const userDueSingleSessions = (adminSettings.reminder_mode === 'single' && isWaAllowed && !adminDailyQuotaReached)
+      ? unreportedSessions.filter((session) => {
+          const settings = settingsByUser.get(session.user_id) ?? {
+            user_id: session.user_id,
+            enabled: true,
+            max_reminders_per_day: 5,
+            interval_seconds: 3600,
+            interval_minutes: 60,
+            reminder_times: ['07:00'],
+            snooze_until: null,
+          };
+          if (!settings.enabled) return false;
+          const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+          const timezone = profileData?.timezone || 'Asia/Jakarta';
+          const today = localDate(now, timezone);
+          const userTodayWaLogs = waNotificationRows.filter(
+            (log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today
+          );
+          return isParticipantReminderDue({
+            settings,
+            userTimezone: timezone,
+            userTodayLogs: userTodayWaLogs,
+            now,
+          });
+        })
+      : [];
+
+    const dueReportSessions = !isWaAllowed || adminDailyQuotaReached
+      ? []
+      : adminSettings.reminder_mode === 'bulk'
+        ? (isBulkReminderDue ? bulkReportSessions : [])
+        : userDueSingleSessions;
 
     let reportSent = false;
     let reportProviderFailures: ProviderFailure[] = [];
-    if (dueReportSessions.length) {
+    if (dueReportSessions.length && foonte && targets.length) {
       const members: CronReminderMember[] = dueReportSessions.map((session) => {
         const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
         return { name: profileData?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' };
@@ -378,7 +411,7 @@ async function handleReminder(request: NextRequest) {
       if (sentUsers.length) {
         const { error } = await supabase.from('notification_logs').insert(sentUsers.map((user_id) => {
           const today = localDate(now, 'Asia/Jakarta');
-          const previousCount = notificationRows.filter((log) => log.user_id === user_id && localDate(new Date(log.sent_at), 'Asia/Jakarta') === today).length;
+          const previousCount = waNotificationRows.filter((log) => log.user_id === user_id && localDate(new Date(log.sent_at), 'Asia/Jakarta') === today).length;
           return { user_id, sent_at: now.toISOString(), status_at_send: 'belum_lapor', sequence_today: previousCount + 1, channel: 'whatsapp' };
         }));
         if (error) throw new Error(`Gagal menyimpan riwayat reminder: ${error.message}`);
@@ -386,14 +419,15 @@ async function handleReminder(request: NextRequest) {
       }
     }
 
-    // Web Push Notifications: kirim push notification browser ke semua peserta yang due
+    // Web Push Notifications: kirim push notification browser ke peserta yang due sesuai jadwal personalnya
     const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
     const vapidSubject = process.env.VAPID_SUBJECT;
     let pushSentCount = 0;
-    if (vapidPublic && vapidPrivate && vapidSubject && userDueSessions.length > 0) {
+    const successfulPushUserIds: string[] = [];
+    if (vapidPublic && vapidPrivate && vapidSubject && userDuePushSessions.length > 0) {
       webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-      const pushUserIds = userDueSessions.map((s) => s.user_id);
+      const pushUserIds = userDuePushSessions.map((s) => s.user_id);
       const { data: pushSubs } = await supabase
         .from('push_subscriptions')
         .select('user_id, endpoint, p256dh, auth')
@@ -412,6 +446,7 @@ async function handleReminder(request: NextRequest) {
                 pushPayload
               );
               pushSentCount++;
+              successfulPushUserIds.push(sub.user_id);
             } catch (pushErr: unknown) {
               const errStatus = (pushErr as { statusCode?: number })?.statusCode;
               // 404 atau 410 berarti subscription sudah tidak valid, hapus dari database
@@ -422,6 +457,28 @@ async function handleReminder(request: NextRequest) {
             }
           })
         );
+      }
+    }
+
+    // Catat log pengiriman Web Push agar tidak dikirim berulang setiap menit
+    const distinctPushUsers = [...new Set(successfulPushUserIds)];
+    if (distinctPushUsers.length > 0) {
+      const today = localDate(now, 'Asia/Jakarta');
+      const pushLogEntries = distinctPushUsers.map((user_id) => {
+        const previousCount = pushNotificationRows.filter(
+          (log) => log.user_id === user_id && localDate(new Date(log.sent_at), 'Asia/Jakarta') === today
+        ).length;
+        return {
+          user_id,
+          sent_at: now.toISOString(),
+          status_at_send: 'belum_lapor' as const,
+          sequence_today: previousCount + 1,
+          channel: 'push' as const,
+        };
+      });
+      const { error: pushLogError } = await supabase.from('notification_logs').insert(pushLogEntries);
+      if (pushLogError) {
+        console.error('[cron/reminder] Gagal mencatat notification_logs untuk push:', pushLogError.message);
       }
     }
 
@@ -449,7 +506,7 @@ async function handleReminder(request: NextRequest) {
 
     let cookieWarningsSent = 0;
     let cookieProviderFailures: ProviderFailure[] = [];
-    if (warningSessions.length) {
+    if (warningSessions.length && foonte && targets.length) {
       const warningBatches = adminSettings.reminder_mode === 'bulk'
         ? [{ sessions: warningSessions, members: warningMembers, targets }]
         : warningSessions.map((session, index) => ({ sessions: [session], members: [warningMembers[index]], targets }));
@@ -469,18 +526,22 @@ async function handleReminder(request: NextRequest) {
     }
 
     const sessionsStillUnreported = unreportedSessions.length;
-    const totalSentToday = distinctSendRunsToday;
+    const totalSentToday = distinctWaRunsToday;
     const reason = reportSent || cookieWarningsSent > 0 || pushSentCount > 0
       ? undefined
-      : reminderTogetherDisabled
+      : !adminSettings.reminder_together_enabled && adminSettings.reminder_mode === 'bulk'
         ? 'reminder_together_disabled'
-        : adminDailyQuotaReached
-          ? 'admin_daily_quota_reached'
-          : sessionsStillUnreported === 0 && warningSessions.length === 0
-            ? 'no_unreported_or_cookie_warning_sessions'
-            : userDueSessions.length === 0
-              ? 'no_participants_due_at_this_time'
-              : 'participants_blocked_by_settings_or_interval';
+        : !adminSettings.wa_bot_enabled
+          ? 'wa_bot_disabled'
+          : !isWeekendAllowed
+            ? 'weekend_reminder_disabled'
+            : adminDailyQuotaReached
+              ? 'admin_daily_quota_reached'
+              : sessionsStillUnreported === 0 && warningSessions.length === 0
+                ? 'no_unreported_or_cookie_warning_sessions'
+                : dueReportSessions.length === 0 && userDuePushSessions.length === 0
+                  ? 'no_participants_due_at_this_time'
+                  : 'participants_blocked_by_settings_or_interval';
     return NextResponse.json({
       success: true,
       sent: reportSent || cookieWarningsSent > 0 || pushSentCount > 0,
@@ -491,7 +552,7 @@ async function handleReminder(request: NextRequest) {
       reportProviderFailures,
       cookieProviderFailures,
       reminderMode: adminSettings.reminder_mode,
-      globalReminderDue: globalDue,
+      globalReminderDue: isBulkReminderDue,
       startTime: adminSettings.start_time,
       intervalSeconds: adminSettings.interval_seconds,
       activeSessions: eligibleSessions.length,

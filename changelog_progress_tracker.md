@@ -5,6 +5,14 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Fixed**: Perbaikan bug notifikasi browser (Web Push) yang terkirim berulang kali setiap menit:
+  - **Pencatatan Log Push Notifikasi**: Menyimpan riwayat pengiriman Web Push browser ke tabel `notification_logs` dengan `channel = 'push'`. Sebelumnya, Web Push berhasil terkirim namun tidak pernah dicatat ke tabel log sehingga pada setiap eksekusi cron berikutnya (per menit), sistem menganggap notifikasi belum pernah dikirim hari itu dan memicu push berulang.
+  - **Pemisahan Evaluasi Channel Notifikasi**: Memisahkan riwayat log antara WhatsApp (`channel = 'whatsapp'`) dan Browser Push (`channel = 'push'`). Evaluasi waktu jatuh tempo pengguna kini menggunakan riwayat log spesifik untuk masing-masing channel, mencegah Web Push dan WhatsApp saling mengacaukan batas jeda interval atau hitungan kuota harian.
+- **Fixed**: Perbaikan bug pengaturan reminder user dan admin yang saling tumpang tindih atau tidak bekerja:
+  - **Dekomposisi Logika Jadwal Admin vs User**:
+    - **Mode Bulk WhatsApp (Admin)**: Mengikuti jadwal sistem admin (`adminSettings.start_time`, `adminSettings.interval_seconds`, `adminSettings.max_reminders_per_day`, `adminSettings.reminder_together_enabled`, `adminSettings.wa_bot_enabled`, dan `adminSettings.weekend_reminder_enabled`). Pengingat grup tidak lagi terkunci oleh status personal user yang belum due di jam yang sama.
+    - **Mode Single WhatsApp & Web Push (Personal)**: Mengikuti preferensi masing-masing peserta (`reminder_times`, `interval_seconds`, `enabled`, dan `snooze_until`). Jika bot WhatsApp dinonaktifkan atau kuota WA admin habis, notifikasi browser (Web Push) tetap dapat terkirim secara independen kepada peserta yang jatuh tempo.
+  - **Pencegahan Error Foonte pada Pengiriman Cookie Warning**: Memastikan `foonte` dan target grup terdefinisi sebelum mencoba mengirimkan warning cookie sesi MagangHub, serta mengembalikan `reason` respons JSON cron yang akurat.
 - **Fixed**: Perbaikan masalah reminder yang tidak tereksekusi saat jam jadwal pengaturan pengguna tiba:
   - **Bypass Jeda Interval untuk Checkpoint Baru**: Pada `isParticipantReminderDue` (`/api/cron/reminder`), checkpoint jadwal yang baru tiba kini langsung dieksekusi tanpa tertahan oleh jeda interval pengiriman lama (misal log sebelumnya dikirim sebelum jam checkpoint tiba atau user baru saja memperbarui jam reminder). Jeda interval hanya diberlakukan untuk mencegah spam pengiriman ulang setelah checkpoint tersebut dilayani.
   - **Eliminasi Pemblokiran Bulk Interval**: Pengiriman pengingat WhatsApp (`dueReportSessions`) dan Web Push notifications tidak lagi diblokir secara sepihak oleh interval admin grup (`bulkIntervalElapsed`) ketika peserta telah mencapai jadwal reminder personal masing-masing.
