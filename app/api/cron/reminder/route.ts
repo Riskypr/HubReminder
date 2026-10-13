@@ -8,6 +8,7 @@ import { decryptSessionSecret } from '@/lib/utils/crypto';
 import { checkAndUpdateAttendance } from '@/lib/services/maganghubService';
 import { isTodayInTz } from '@/lib/utils/time';
 import type { AttendanceStatus } from '@/lib/types/attendance';
+import webpush from 'web-push';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -294,12 +295,24 @@ async function handleReminder(request: NextRequest) {
     }
 
     // Ambil daftar peserta yang BENAR-BENAR belum lapor untuk hari ini
-    const unreportedSessions = eligibleSessions.filter((session) => latestTodayStatusByUser.get(session.user_id) === 'belum_lapor');
+    // Jika status belum diketahui (undefined/unknown), anggap belum lapor agar tidak terlewat.
+    const unreportedSessions = eligibleSessions.filter((session) => {
+      const status = latestTodayStatusByUser.get(session.user_id);
+      return status !== 'selesai' && status !== 'session_expired';
+    });
 
     // Evaluasi peserta yang jatuh tempo reminder berdasarkan preferensi waktu masing-masing
     const userDueSessions = unreportedSessions.filter((session) => {
-      const settings = settingsByUser.get(session.user_id);
-      if (!settings) return false;
+      const settings = settingsByUser.get(session.user_id) ?? {
+        user_id: session.user_id,
+        enabled: true,
+        max_reminders_per_day: 5,
+        interval_seconds: 3600,
+        interval_minutes: 60,
+        reminder_times: ['07:00'],
+        snooze_until: null,
+      };
+      if (!settings.enabled) return false;
       const timezone = session.profiles?.timezone || 'Asia/Jakarta';
       const today = localDate(now, timezone);
       const userTodayLogs = notificationRows.filter(
@@ -350,6 +363,45 @@ async function handleReminder(request: NextRequest) {
       }
     }
 
+    // Web Push Notifications: kirim push notification browser ke semua peserta yang due
+    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+    const vapidSubject = process.env.VAPID_SUBJECT;
+    let pushSentCount = 0;
+    if (vapidPublic && vapidPrivate && vapidSubject && dueReportSessions.length > 0) {
+      webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
+      const pushUserIds = dueReportSessions.map((s) => s.user_id);
+      const { data: pushSubs } = await supabase
+        .from('push_subscriptions')
+        .select('user_id, endpoint, p256dh, auth')
+        .in('user_id', pushUserIds);
+      if (pushSubs?.length) {
+        const pushPayload = JSON.stringify({
+          title: 'HubReminder — Reminder Laporan',
+          body: 'Laporan harian MagangHub kamu belum diisi. Tap untuk isi sekarang.',
+          url: 'https://monev.maganghub.kemnaker.go.id/dashboard',
+        });
+        await Promise.allSettled(
+          pushSubs.map(async (sub) => {
+            try {
+              await webpush.sendNotification(
+                { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+                pushPayload
+              );
+              pushSentCount++;
+            } catch (pushErr: unknown) {
+              const errStatus = (pushErr as { statusCode?: number })?.statusCode;
+              // 404 atau 410 berarti subscription sudah tidak valid, hapus dari database
+              if (errStatus === 404 || errStatus === 410) {
+                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+              }
+              console.warn(`[cron/reminder] Push gagal ke ${sub.endpoint.slice(0, 40)}:`, pushErr);
+            }
+          })
+        );
+      }
+    }
+
     const warningCandidates = await Promise.all(sessions.map(async (session) => {
       if (session.status === 'valid') {
         const expiry = await accessTokenExpiry(session.encrypted_session);
@@ -395,7 +447,7 @@ async function handleReminder(request: NextRequest) {
 
     const sessionsStillUnreported = unreportedSessions.length;
     const totalSentToday = distinctSendRunsToday;
-    const reason = reportSent || cookieWarningsSent > 0
+    const reason = reportSent || cookieWarningsSent > 0 || pushSentCount > 0
       ? undefined
       : reminderTogetherDisabled
         ? 'reminder_together_disabled'
@@ -408,7 +460,7 @@ async function handleReminder(request: NextRequest) {
               : 'participants_blocked_by_settings_or_interval';
     return NextResponse.json({
       success: true,
-      sent: reportSent || cookieWarningsSent > 0,
+      sent: reportSent || cookieWarningsSent > 0 || pushSentCount > 0,
       reason,
       reportSent,
       reportMemberCount: dueReportSessions.length,
@@ -428,6 +480,7 @@ async function handleReminder(request: NextRequest) {
       reminderTogetherEnabled: adminSettings.reminder_together_enabled,
       waBotEnabled: adminSettings.wa_bot_enabled,
       weekendReminderEnabled: adminSettings.weekend_reminder_enabled,
+      pushSentCount,
     });
   } catch (error) {
     console.error('[cron/reminder] gagal menjalankan reminder:', error);
