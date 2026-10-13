@@ -237,15 +237,34 @@ async function handleReminder(request: NextRequest) {
     }
 
     const ids = sessions.map((session) => session.user_id);
+
+    // Filter notification_logs ke 2 hari terakhir agar tidak memuat seluruh history
+    // dan menghindari bug timezone saat membandingkan tanggal hari ini.
+    const twoDaysAgoIso = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+
     const [{ data: settingsData, error: settingsError }, { data: notificationData, error: notificationError }, { data: cookieLogData, error: cookieLogError }] = await Promise.all([
-      supabase.from('reminder_settings').select('user_id, enabled, max_reminders_per_day, interval_seconds, interval_minutes, reminder_times, snooze_until').in('user_id', ids),
-      supabase.from('notification_logs').select('user_id, sent_at, channel').in('user_id', ids),
-      supabase.from('cookie_warning_logs').select('user_id, sent_at, session_updated_at, status').in('user_id', ids),
+      supabase.from('reminder_settings').select('user_id, enabled, max_reminders_per_day, interval_seconds, interval_minutes, reminder_times, snooze_until, updated_at').in('user_id', ids).order('updated_at', { ascending: false }),
+      supabase.from('notification_logs').select('user_id, sent_at, channel').in('user_id', ids).gte('sent_at', twoDaysAgoIso),
+      supabase.from('cookie_warning_logs').select('user_id, sent_at, session_updated_at, status').in('user_id', ids).gte('sent_at', twoDaysAgoIso),
     ]);
     if (settingsError) throw new Error(`Gagal mengambil pengaturan reminder: ${settingsError.message}`);
     if (notificationError) throw new Error(`Gagal mengambil riwayat reminder: ${notificationError.message}`);
     if (cookieLogError) throw new Error(`Gagal mengambil riwayat warning cookie: ${cookieLogError.message}`);
-    const settingsByUser = new Map((settingsData ?? []).map((row) => [row.user_id, row as SettingsRow]));
+
+    // Bangun Map settings per user, ambil yang paling baru (updated_at terbesar) jika ada duplikat
+    // Duplikat bisa terjadi jika primary key constraint tidak berlaku pada tabel lama.
+    const settingsByUser = new Map<string, SettingsRow>();
+    for (const row of (settingsData ?? []) as (SettingsRow & { updated_at?: string })[]) {
+      if (!settingsByUser.has(row.user_id)) {
+        // Normalisasi reminder_times: DB mengembalikan time[] sebagai 'HH:MM:SS', potong ke 'HH:MM'
+        const normalized: SettingsRow = {
+          ...row,
+          reminder_times: (row.reminder_times ?? ['07:00']).map((t) => t.slice(0, 5)),
+        };
+        settingsByUser.set(row.user_id, normalized);
+      }
+    }
+
     const notificationRows = (notificationData ?? []) as NotificationRow[];
     const cookieLogs = (cookieLogData ?? []) as CookieLogRow[];
 
@@ -254,24 +273,35 @@ async function handleReminder(request: NextRequest) {
 
     // 1. Jadwal Pengingat WhatsApp Grup (Admin Bulk Mode)
     const todayJakarta = localDate(now, 'Asia/Jakarta');
-    const distinctWaRunsToday = new Set(
-      waNotificationRows
-        .filter((log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta)
-        .map((log) => log.sent_at)
-    ).size;
+
+    // Hitung admin start_time dalam UTC milisecond agar bisa dibandingkan dengan sent_at log
+    const [adminStartHour = 8, adminStartMinute = 0] = adminSettings.start_time.split(':').map(Number);
+    const adminStartSeconds = adminStartHour * 3600 + adminStartMinute * 60;
+    const currentJakartaSec = jakartaSeconds(now);
+    const adminStartTimeReached = currentJakartaSec >= adminStartSeconds;
+
+    // Kuota harian admin hanya menghitung pengiriman WA yang terjadi SETELAH start_time hari ini.
+    // Pengiriman dari jadwal lama (sebelum admin mengubah start_time) tidak ikut menghitung,
+    // sehingga perubahan start_time langsung efektif pada hari yang sama.
+    const adminStartUtcMs = new Date(
+      `${todayJakarta}T${String(adminStartHour).padStart(2, '0')}:${String(adminStartMinute).padStart(2, '0')}:00+07:00`
+    ).getTime();
+    const todayWaLogsFromStartTime = waNotificationRows.filter((log) => {
+      const logMs = Date.parse(log.sent_at);
+      return localDate(new Date(logMs), 'Asia/Jakarta') === todayJakarta && logMs >= adminStartUtcMs;
+    });
+
+    const distinctWaRunsToday = new Set(todayWaLogsFromStartTime.map((log) => log.sent_at)).size;
     const adminDailyQuotaReached = distinctWaRunsToday >= adminSettings.max_reminders_per_day;
 
+    // Interval admin dihitung dari pengiriman WA terakhir hari ini (bisa dari sebelum start_time),
+    // agar tidak spam jika admin mengubah start_time maju ke waktu yang sudah lewat.
     const lastWaRunTime = waNotificationRows
       .filter((log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta)
       .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
 
     const adminIntervalElapsed = !lastWaRunTime ||
       now.getTime() - lastWaRunTime >= adminSettings.interval_seconds * 1000;
-
-    const [adminStartHour = 8, adminStartMinute = 0] = adminSettings.start_time.split(':').map(Number);
-    const adminStartSeconds = adminStartHour * 3600 + adminStartMinute * 60;
-    const currentJakartaSec = jakartaSeconds(now);
-    const adminStartTimeReached = currentJakartaSec >= adminStartSeconds;
 
     const isBulkReminderDue = isWaAllowed &&
       adminSettings.reminder_mode === 'bulk' &&
