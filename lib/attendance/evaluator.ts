@@ -50,14 +50,23 @@ export function evaluateReminder({
   }).formatToParts(currentTime);
   const partValue = (type: Intl.DateTimeFormatPartTypes) => Number(timeParts.find((part) => part.type === type)?.value ?? 0);
   const currentSeconds = partValue('hour') * 3600 + partValue('minute') * 60 + partValue('second');
-  const intervalSeconds = settings.interval_seconds ?? settings.interval_minutes * 60;
-  const isScheduledTime = (settings.reminder_times?.length ? settings.reminder_times : ['07:00']).some((time) => {
-    const [hourPart, minutePart, secondPart] = time.split(':');
-    const scheduledSeconds = Number(hourPart) * 3600 + Number(minutePart) * 60 + Number(secondPart ?? 0);
-    return currentSeconds >= scheduledSeconds && currentSeconds - scheduledSeconds < intervalSeconds;
-  });
-  if (!isScheduledTime) {
+  const reminderTimes = settings.reminder_times?.length ? settings.reminder_times : ['07:00'];
+  const scheduledSecondsList = reminderTimes
+    .map((time) => {
+      const [hourPart, minutePart, secondPart] = time.split(':');
+      return Number(hourPart) * 3600 + Number(minutePart) * 60 + Number(secondPart ?? 0);
+    })
+    .sort((a, b) => a - b);
+
+  if (currentSeconds < scheduledSecondsList[0]) {
     return { shouldSend: false, reason: 'outside_reminder_schedule' };
+  }
+
+  if (scheduledSecondsList.length > 1) {
+    const arrivedCheckpoints = scheduledSecondsList.filter((sec) => currentSeconds >= sec).length;
+    if (sentLogsToday.length >= arrivedCheckpoints) {
+      return { shouldSend: false, reason: 'outside_reminder_schedule' };
+    }
   }
 
   // 4. Cek apakah sudah mencapai kuota maksimum hari ini

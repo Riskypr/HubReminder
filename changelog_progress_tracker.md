@@ -5,6 +5,12 @@ Dokumen ini mencatat seluruh perubahan struktur, skema database, dan penambahan 
 ---
 
 ## [Unreleased / Current Work]
+- **Fixed**: Perbaikan bug jadwal reminder yang tidak tampil/terkirim sesuai waktu pengaturan masing-masing pengguna:
+  - **Kesesuaian Jadwal Personal**: Pada cron pengingat WhatsApp (`/api/cron/reminder`), implementasi fungsi `isParticipantReminderDue` memastikan daftar peserta yang masuk ke pengingat (baik mode Bulk maupun Single) benar-benar telah mencapai waktu pengingat yang diatur masing-masing user (`reminder_times`), tidak sedang di-snooze, pengingat berstatus aktif, serta belum melebihi kuota harian personal (`max_reminders_per_day`). Peserta yang mengatur jam pengingat siang/sore tidak lagi keliru tercantum di pengingat pagi hari.
+  - **Toleransi Panggilan Cron**: Pengecekan waktu tidak lagi menggunakan komparasi menit kaku yang rentan gagal akibat delay eksekusi cron-job.org, melainkan mendeteksi apakah waktu jadwal/checkpoint telah tiba dan interval jeda telah terpenuhi.
+  - **Perbaikan UI Form Pengingat**: Mengembalikan fungsionalitas tambah waktu pengingat (`Tambah Waktu`) dan hapus waktu pengingat (`Hapus`) pada `ReminderSettingsForm.tsx`, sehingga pengguna dapat secara bebas menambah beberapa waktu reminder yang diinginkan (hingga 20 waktu) atau menghapus waktu yang tidak diperlukan.
+  - **Normalisasi Format Waktu**: Mengoreksi format `reminder_times` dari PostgreSQL `time[]` (yang mengembalikan `HH:MM:SS`) agar dinormalisasi menjadi `HH:MM` pada `reminderSettingsService.ts`, sehingga kartu jadwal di Dashboard dan form pengaturan selalu tampil bersih dan konsisten.
+  - **Proteksi Kuota Foonte Admin**: Menghitung kuota admin harian berdasarkan jumlah eksekusi/pesan unik (run pengiriman), bukan menghitung jumlah baris log per peserta yang sebelumnya menyebabkan kuota admin habis prematur.
 - **Changed**: Bot WhatsApp auto-submit laporan (`/api/webhook/fonnte`) diubah agar **tidak langsung submit**. Bot kini membuat draf laporan (Gemini AI), menyimpannya dengan status `waiting_approval`, dan mengirimkan pratinjau lengkap ke WhatsApp dengan instruksi persetujuan pengguna:
   - Balas `KIRIM`, `YA`, `OKE`, atau `SETUJU` untuk menyetujui dan submit ke MagangHub.
   - Balas `ULANG` atau `REGEN` untuk generate ulang draf menggunakan Gemini AI.

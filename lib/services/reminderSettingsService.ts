@@ -43,7 +43,9 @@ export async function getReminderSettings(
   return {
     ...settings,
     interval_seconds: settings.interval_seconds ?? settings.interval_minutes * 60,
-    reminder_times: settings.reminder_times?.length ? settings.reminder_times : ['07:00'],
+    reminder_times: settings.reminder_times?.length
+      ? [...new Set(settings.reminder_times.map((t) => t.slice(0, 5)))].sort()
+      : ['07:00'],
   };
 }
 
