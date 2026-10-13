@@ -107,42 +107,42 @@ export function isParticipantReminderDue({
 
   // Ambil checkpoint jadwal yang sudah tiba saat ini
   const arrivedCheckpoints = scheduledSecondsList.filter((sec) => currentSeconds >= sec);
+  if (arrivedCheckpoints.length === 0) {
+    return false;
+  }
   const latestArrivedCheckpoint = arrivedCheckpoints[arrivedCheckpoints.length - 1];
 
-  // Hitung detik waktu pengiriman terakhir dalam zona waktu pengguna
-  const logParts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: userTimezone,
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(latestLogTime));
-  const getLogPart = (type: Intl.DateTimeFormatPartTypes) => Number(logParts.find((p) => p.type === type)?.value ?? 0);
-  const latestLogSeconds = getLogPart('hour') * 3600 + getLogPart('minute') * 60 + getLogPart('second');
+  // Hitung detik waktu pengiriman setiap log hari ini dalam zona waktu pengguna
+  const logSecondsToday = userTodayLogs.map((log) => {
+    const logParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: userTimezone,
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(new Date(Date.parse(log.sent_at)));
+    const getLogPart = (type: Intl.DateTimeFormatPartTypes) => Number(logParts.find((p) => p.type === type)?.value ?? 0);
+    return getLogPart('hour') * 3600 + getLogPart('minute') * 60 + getLogPart('second');
+  });
 
-  // Jika checkpoint jadwal terbaru ini BELUM pernah dikirimi reminder hari ini
-  // (misal log sebelumnya dikirim sebelum jam checkpoint ini tiba, atau user baru saja mengubah jam pengingat),
-  // maka reminder harus segera dieksekusi tanpa tertahan oleh jeda interval pengiriman sebelumnya.
-  const hasLogSinceLatestCheckpoint = latestLogSeconds >= latestArrivedCheckpoint;
-  if (!hasLogSinceLatestCheckpoint) {
-    if (scheduledSecondsList.length > 1) {
-      return userTodayLogs.length < arrivedCheckpoints.length;
-    }
-    return true;
-  }
-
-  // Jika checkpoint ini SUDAH pernah dikirimi reminder hari ini:
-  // Jeda minimum (interval) antar pengiriman wajib dipenuhi agar tidak spam
-  if (now.getTime() - latestLogTime < intervalSeconds * 1000) {
+  // Cek apakah checkpoint terbaru yang sudah tiba ini SUDAH pernah dikirimi reminder hari ini
+  // (yaitu ada pengiriman yang terjadi pada atau setelah jam checkpoint tersebut).
+  // Menghindari bug pengiriman berulang pada browser (hanya kirim 1x per checkpoint).
+  const hasLogForLatestCheckpoint = logSecondsToday.some((sec) => sec >= latestArrivedCheckpoint);
+  if (hasLogForLatestCheckpoint) {
     return false;
   }
 
-  // Jika user mengatur beberapa waktu (misal: ['08:00', '13:00', '17:00']),
-  // pengingat hanya dikirim sesuai jumlah checkpoint yang telah tiba
-  if (scheduledSecondsList.length > 1) {
-    return userTodayLogs.length < arrivedCheckpoints.length;
+  // Jika checkpoint ini BELUM pernah dikirimi pengingat, pastikan jeda cooldown minimum (60 detik)
+  // dari pengiriman sebelumnya telah terpenuhi agar tidak spam jika cron tereksekusi dua kali dalam jendela waktu dekat.
+  if (userTodayLogs.length > 0) {
+    const latestLogTime = userTodayLogs.reduce(
+      (latest, log) => Math.max(latest, Date.parse(log.sent_at)),
+      0
+    );
+    if (now.getTime() - latestLogTime < 60 * 1000) {
+      return false;
+    }
   }
 
-  // Jika 1 waktu pengingat (mode recurring interval setelah checkpoint pertama),
-  // izinkan pengiriman ulang berkala hingga kuota maks tercapai
-  return userTodayLogs.length < settings.max_reminders_per_day;
+  return true;
 }
 
 function localDate(date: Date, timezone: string) {
@@ -294,14 +294,23 @@ async function handleReminder(request: NextRequest) {
     const distinctWaRunsToday = new Set(todayWaLogsFromStartTime.map((log) => log.sent_at)).size;
     const adminDailyQuotaReached = distinctWaRunsToday >= adminSettings.max_reminders_per_day;
 
-    // Interval admin dihitung dari pengiriman WA terakhir hari ini (bisa dari sebelum start_time),
-    // agar tidak spam jika admin mengubah start_time maju ke waktu yang sudah lewat.
-    const lastWaRunTime = waNotificationRows
+    // Interval admin:
+    // 1. Jika belum ada pengiriman WA sejak start_time hari ini (pengiriman perdana untuk jadwal start_time ini):
+    //    Cukup pastikan tidak double-send dalam rentang 60 detik terakhir (debounce) dari pengiriman WA apapun hari ini.
+    //    Pengiriman perdana TIDAK boleh diblokir oleh interval dari pengiriman jadwal lama sebelum start_time.
+    // 2. Jika sudah pernah ada pengiriman WA sejak start_time hari ini:
+    //    Pengiriman berikutnya wajib mematuhi interval_seconds dari pengiriman terakhir setelah start_time.
+    const lastWaRunSinceStartTime = todayWaLogsFromStartTime.reduce(
+      (latest, log) => Math.max(latest, Date.parse(log.sent_at)),
+      0
+    );
+    const lastAnyWaRunToday = waNotificationRows
       .filter((log) => localDate(new Date(log.sent_at), 'Asia/Jakarta') === todayJakarta)
       .reduce((latest, log) => Math.max(latest, Date.parse(log.sent_at)), 0);
 
-    const adminIntervalElapsed = !lastWaRunTime ||
-      now.getTime() - lastWaRunTime >= adminSettings.interval_seconds * 1000;
+    const adminIntervalElapsed = todayWaLogsFromStartTime.length === 0
+      ? (!lastAnyWaRunToday || now.getTime() - lastAnyWaRunToday >= 60 * 1000)
+      : (now.getTime() - lastWaRunSinceStartTime >= adminSettings.interval_seconds * 1000);
 
     const isBulkReminderDue = isWaAllowed &&
       adminSettings.reminder_mode === 'bulk' &&

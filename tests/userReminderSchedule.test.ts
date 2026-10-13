@@ -83,8 +83,9 @@ describe('isParticipantReminderDue()', () => {
     expect(result).toBe(false);
   });
 
-  it('mengizinkan pengulangan pengingat (recurring interval) saat interval telah terlewati', () => {
+  it('tidak mengirimkan pengulangan pengingat jika checkpoint jadwal telah terpenuhi (tidak spam berulang)', () => {
     // Pengiriman pertama jam 08:00, sekarang jam 09:05 (lewat 65 menit)
+    // Karena jadwal pengguna hanya ['08:00'] dan sudah terkirim pada jam 08:00, tidak boleh dikirim ulang berulang kali
     const lastSent = '2026-10-13T08:00:00+07:00';
     const now = new Date('2026-10-13T09:05:00+07:00');
     const result = isParticipantReminderDue({
@@ -93,7 +94,7 @@ describe('isParticipantReminderDue()', () => {
       userTodayLogs: [{ user_id: 'user-1', sent_at: lastSent }],
       now,
     });
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 
   it('mengizinkan eksekusi pengingat saat jam jadwal baru tiba meskipun interval sejak log lama belum 60 menit', () => {
