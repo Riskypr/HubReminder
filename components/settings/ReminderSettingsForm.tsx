@@ -65,6 +65,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
   const [editedReminderTime, setEditedReminderTime] = useState('');
   const [newReminderTime, setNewReminderTime] = useState('08:00');
   const [addReminderTimeError, setAddReminderTimeError] = useState<string | null>(null);
+  const [editReminderTimeError, setEditReminderTimeError] = useState<string | null>(null);
 
   function handleAddReminderTime() {
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(newReminderTime)) {
@@ -125,23 +126,23 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
   function startEditingReminderTime(time: string) {
     setEditingReminderTime(time);
     setEditedReminderTime(time);
-    setReminderTimeError(null);
+    setEditReminderTimeError(null);
   }
 
   function cancelEditingReminderTime() {
     setEditingReminderTime(null);
     setEditedReminderTime('');
-    setReminderTimeError(null);
+    setEditReminderTimeError(null);
   }
 
   function saveEditedReminderTime(originalTime: string) {
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(editedReminderTime)) {
-      setReminderTimeError('Pilih waktu dengan format HH:MM.');
+      setEditReminderTimeError('Pilih waktu dengan format HH:MM.');
       return;
     }
     const nextTime = normalizeReminderTime(editedReminderTime);
     if (reminderTimes.some((time) => time !== originalTime && time === nextTime)) {
-      setReminderTimeError('Waktu tersebut sudah ada di daftar.');
+      setEditReminderTimeError('Waktu tersebut sudah ada di daftar.');
       return;
     }
 
@@ -368,14 +369,14 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
                         value={editedReminderTime}
                         onChange={(event) => {
                           setEditedReminderTime(event.target.value);
-                          setReminderTimeError(null);
+                          setEditReminderTimeError(null);
                         }}
                         className="input text-xs py-2"
                         autoFocus
                       />
-                      {reminderTimeError && (
+                      {editReminderTimeError && (
                         <p className="text-xs text-red-600 font-medium" role="alert">
-                          {reminderTimeError}
+                          {editReminderTimeError}
                         </p>
                       )}
                       <div className="flex justify-end gap-2">
