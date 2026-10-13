@@ -18,8 +18,6 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
-  Plus,
-  Trash2,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
@@ -63,42 +61,7 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editingReminderTime, setEditingReminderTime] = useState<string | null>(null);
   const [editedReminderTime, setEditedReminderTime] = useState('');
-  const [newReminderTime, setNewReminderTime] = useState('08:00');
-  const [addReminderTimeError, setAddReminderTimeError] = useState<string | null>(null);
   const [editReminderTimeError, setEditReminderTimeError] = useState<string | null>(null);
-
-  function handleAddReminderTime() {
-    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(newReminderTime)) {
-      setAddReminderTimeError('Pilih waktu dengan format HH:MM.');
-      return;
-    }
-    const normalized = normalizeReminderTime(newReminderTime);
-    if (reminderTimes.includes(normalized)) {
-      setAddReminderTimeError('Waktu tersebut sudah ada di daftar.');
-      return;
-    }
-    if (reminderTimes.length >= 20) {
-      setAddReminderTimeError('Maksimum 20 waktu pengingat.');
-      return;
-    }
-    setValue('reminder_times', [...reminderTimes, normalized].sort(), {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
-    setAddReminderTimeError(null);
-  }
-
-  function handleRemoveReminderTime(timeToRemove: string) {
-    if (reminderTimes.length <= 1) {
-      toast.warning('Minimal harus ada 1 jadwal waktu pengingat.');
-      return;
-    }
-    setValue(
-      'reminder_times',
-      reminderTimes.filter((time) => time !== timeToRemove),
-      { shouldValidate: true, shouldDirty: true }
-    );
-  }
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const isSnoozedToday = initialSettings.snooze_until === todayStr;
@@ -312,47 +275,15 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
 
           {/* Waktu Reminder Terjadwal (Full Width Grid lg:col-span-12) */}
           <div className="card space-y-4 border-slate-200/90 bg-white p-5 lg:col-span-12">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
-                  <Clock3 size={17} className="text-primary" />
-                  <span>Jadwal Waktu Pengingat ({reminderTimes.length} waktu aktif)</span>
-                </h3>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Pengingat akan dikirimkan sesuai waktu yang Anda atur berikut. Anda dapat menambah, mengubah, atau menghapus waktu.
-                </p>
-              </div>
-
-              {/* Tambah Waktu Baru */}
-              <div className="flex items-center gap-2">
-                <input
-                  id="new-reminder-time"
-                  type="time"
-                  step="60"
-                  value={newReminderTime}
-                  onChange={(event) => {
-                    setNewReminderTime(event.target.value);
-                    setAddReminderTimeError(null);
-                  }}
-                  className="input text-xs py-1.5 px-2.5 font-bold tabular-nums w-28"
-                  aria-label="Waktu reminder baru"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddReminderTime}
-                  className="btn-outline min-h-[38px] px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 shrink-0"
-                >
-                  <Plus size={14} aria-hidden="true" />
-                  <span>Tambah</span>
-                </button>
-              </div>
-            </div>
-
-            {addReminderTimeError && (
-              <p className="text-xs text-red-600 font-medium" role="alert">
-                {addReminderTimeError}
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-text-primary flex items-center gap-2">
+                <Clock3 size={17} className="text-primary" />
+                <span>Jadwal Waktu Pengingat</span>
+              </h3>
+              <p className="text-xs text-text-muted mt-0.5">
+                Pengingat akan dikirimkan sesuai waktu yang Anda atur berikut. Klik tombol Ubah untuk menyesuaikan waktu pengingat.
               </p>
-            )}
+            </div>
 
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" aria-label="Daftar waktu reminder">
               {reminderTimes.map((time) => (
@@ -408,21 +339,11 @@ export default function ReminderSettingsForm({ initialSettings }: Props) {
                         <button
                           type="button"
                           onClick={() => startEditingReminderTime(time)}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-text-secondary transition hover:bg-slate-100 hover:text-text-primary"
+                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-text-secondary transition hover:bg-slate-100 hover:text-text-primary"
                           aria-label={`Ubah waktu ${time}`}
                         >
                           <Pencil size={12} aria-hidden="true" />
                           <span>Ubah</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveReminderTime(time)}
-                          disabled={reminderTimes.length <= 1}
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-xl border border-slate-200 bg-white text-rose-500 transition hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                          aria-label={`Hapus waktu ${time}`}
-                          title={reminderTimes.length <= 1 ? 'Minimal 1 waktu pengingat' : `Hapus waktu ${time}`}
-                        >
-                          <Trash2 size={12} aria-hidden="true" />
                         </button>
                       </div>
                     </div>

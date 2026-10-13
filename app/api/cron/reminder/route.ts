@@ -67,20 +67,7 @@ export function isParticipantReminderDue({
   // 3. Batas maksimum reminder harian per pengguna
   if (userTodayLogs.length >= settings.max_reminders_per_day) return false;
 
-  // 4. Jeda minimum (interval) sejak pengiriman terakhir pengguna hari ini
-  const intervalSeconds = settings.interval_seconds > 0
-    ? settings.interval_seconds
-    : (settings.interval_minutes ? settings.interval_minutes * 60 : 3600);
-
-  const latestLogTime = userTodayLogs.reduce(
-    (latest, log) => Math.max(latest, Date.parse(log.sent_at)),
-    0
-  );
-  if (latestLogTime > 0 && now.getTime() - latestLogTime < intervalSeconds * 1000) {
-    return false;
-  }
-
-  // 5. Cek jadwal waktu reminder pengguna
+  // 4. Cek jadwal waktu reminder pengguna
   const reminderTimes = settings.reminder_times?.length
     ? settings.reminder_times
     : ['07:00'];
@@ -109,15 +96,52 @@ export function isParticipantReminderDue({
     return true;
   }
 
-  // Jika user mengatur beberapa waktu (misal: ['08:00', '13:00', '17:00']),
-  // pengingat berikutnya dikirim saat checkpoint jadwal berikutnya tiba.
-  if (scheduledSecondsList.length > 1) {
-    const arrivedCheckpoints = scheduledSecondsList.filter((sec) => currentSeconds >= sec).length;
-    return userTodayLogs.length < arrivedCheckpoints;
+  const latestLogTime = userTodayLogs.reduce(
+    (latest, log) => Math.max(latest, Date.parse(log.sent_at)),
+    0
+  );
+
+  const intervalSeconds = settings.interval_seconds > 0
+    ? settings.interval_seconds
+    : (settings.interval_minutes ? settings.interval_minutes * 60 : 3600);
+
+  // Ambil checkpoint jadwal yang sudah tiba saat ini
+  const arrivedCheckpoints = scheduledSecondsList.filter((sec) => currentSeconds >= sec);
+  const latestArrivedCheckpoint = arrivedCheckpoints[arrivedCheckpoints.length - 1];
+
+  // Hitung detik waktu pengiriman terakhir dalam zona waktu pengguna
+  const logParts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: userTimezone,
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(latestLogTime));
+  const getLogPart = (type: Intl.DateTimeFormatPartTypes) => Number(logParts.find((p) => p.type === type)?.value ?? 0);
+  const latestLogSeconds = getLogPart('hour') * 3600 + getLogPart('minute') * 60 + getLogPart('second');
+
+  // Jika checkpoint jadwal terbaru ini BELUM pernah dikirimi reminder hari ini
+  // (misal log sebelumnya dikirim sebelum jam checkpoint ini tiba, atau user baru saja mengubah jam pengingat),
+  // maka reminder harus segera dieksekusi tanpa tertahan oleh jeda interval pengiriman sebelumnya.
+  const hasLogSinceLatestCheckpoint = latestLogSeconds >= latestArrivedCheckpoint;
+  if (!hasLogSinceLatestCheckpoint) {
+    if (scheduledSecondsList.length > 1) {
+      return userTodayLogs.length < arrivedCheckpoints.length;
+    }
+    return true;
   }
 
-  // Jika hanya 1 waktu pengingat (misal default ['07:00']),
-  // berulang setiap intervalSeconds hingga batas harian tercapai
+  // Jika checkpoint ini SUDAH pernah dikirimi reminder hari ini:
+  // Jeda minimum (interval) antar pengiriman wajib dipenuhi agar tidak spam
+  if (now.getTime() - latestLogTime < intervalSeconds * 1000) {
+    return false;
+  }
+
+  // Jika user mengatur beberapa waktu (misal: ['08:00', '13:00', '17:00']),
+  // pengingat hanya dikirim sesuai jumlah checkpoint yang telah tiba
+  if (scheduledSecondsList.length > 1) {
+    return userTodayLogs.length < arrivedCheckpoints.length;
+  }
+
+  // Jika 1 waktu pengingat (mode recurring interval setelah checkpoint pertama),
+  // izinkan pengiriman ulang berkala hingga kuota maks tercapai
   return userTodayLogs.length < settings.max_reminders_per_day;
 }
 
@@ -260,9 +284,7 @@ async function handleReminder(request: NextRequest) {
     const reminderTogetherDisabled = adminSettings.reminder_mode === 'bulk' && !adminSettings.reminder_together_enabled;
 
     // Evaluasi apakah reminder berpotensi dikirim saat ini
-    const isPotentiallyDue = !adminDailyQuotaReached && !reminderTogetherDisabled && (
-      adminSettings.reminder_mode === 'bulk' ? bulkIntervalElapsed : true
-    );
+    const isPotentiallyDue = !adminDailyQuotaReached && !reminderTogetherDisabled;
 
     // LIVE VERIFICATION: Jika reminder berpotensi dikirim saat ini, verifikasi peserta
     // yang belum tercatat 'selesai' hari ini langsung ke MagangHub untuk mencegah
@@ -313,7 +335,8 @@ async function handleReminder(request: NextRequest) {
         snooze_until: null,
       };
       if (!settings.enabled) return false;
-      const timezone = session.profiles?.timezone || 'Asia/Jakarta';
+      const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+      const timezone = profileData?.timezone || 'Asia/Jakarta';
       const today = localDate(now, timezone);
       const userTodayLogs = notificationRows.filter(
         (log) => log.user_id === session.user_id && localDate(new Date(log.sent_at), timezone) === today
@@ -326,16 +349,16 @@ async function handleReminder(request: NextRequest) {
       });
     });
 
-    // Mode bulk: kirim kompilasi peserta yang sedang jatuh tempo sesuai jadwal masing-masing.
-    // Mode single: kirim pesan personal untuk peserta yang sedang jatuh tempo.
-    const dueReportSessions = (adminDailyQuotaReached || reminderTogetherDisabled) ? [] : adminSettings.reminder_mode === 'bulk'
-      ? (!bulkIntervalElapsed ? [] : userDueSessions)
-      : userDueSessions;
+    // Mode bulk & single: kirim reminder bagi peserta yang sedang jatuh tempo sesuai jadwal masing-masing
+    const dueReportSessions = (adminDailyQuotaReached || reminderTogetherDisabled) ? [] : userDueSessions;
 
     let reportSent = false;
     let reportProviderFailures: ProviderFailure[] = [];
     if (dueReportSessions.length) {
-      const members: CronReminderMember[] = dueReportSessions.map((session) => ({ name: session.profiles?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' }));
+      const members: CronReminderMember[] = dueReportSessions.map((session) => {
+        const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+        return { name: profileData?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' };
+      });
       const useAutoReport = !!process.env.GEMINI_API_KEY;
       const formatFn = useAutoReport ? formatAutoReportReminder : formatBulkReportReminder;
       const messages = adminSettings.reminder_mode === 'bulk'
@@ -368,9 +391,9 @@ async function handleReminder(request: NextRequest) {
     const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
     const vapidSubject = process.env.VAPID_SUBJECT;
     let pushSentCount = 0;
-    if (vapidPublic && vapidPrivate && vapidSubject && dueReportSessions.length > 0) {
+    if (vapidPublic && vapidPrivate && vapidSubject && userDueSessions.length > 0) {
       webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-      const pushUserIds = dueReportSessions.map((s) => s.user_id);
+      const pushUserIds = userDueSessions.map((s) => s.user_id);
       const { data: pushSubs } = await supabase
         .from('push_subscriptions')
         .select('user_id, endpoint, p256dh, auth')
@@ -453,10 +476,10 @@ async function handleReminder(request: NextRequest) {
         ? 'reminder_together_disabled'
         : adminDailyQuotaReached
           ? 'admin_daily_quota_reached'
-          : adminSettings.reminder_mode === 'bulk' && !bulkIntervalElapsed && sessionsStillUnreported > 0
-            ? 'bulk_interval_not_elapsed'
-            : sessionsStillUnreported === 0 && warningSessions.length === 0
-              ? 'no_unreported_or_cookie_warning_sessions'
+          : sessionsStillUnreported === 0 && warningSessions.length === 0
+            ? 'no_unreported_or_cookie_warning_sessions'
+            : userDueSessions.length === 0
+              ? 'no_participants_due_at_this_time'
               : 'participants_blocked_by_settings_or_interval';
     return NextResponse.json({
       success: true,

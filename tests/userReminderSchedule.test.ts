@@ -96,6 +96,20 @@ describe('isParticipantReminderDue()', () => {
     expect(result).toBe(true);
   });
 
+  it('mengizinkan eksekusi pengingat saat jam jadwal baru tiba meskipun interval sejak log lama belum 60 menit', () => {
+    // Pengguna sebelumnya mendapat reminder/test jam 08:15, lalu mengubah jadwal reminder ke 08:30.
+    // Pada jam 08:30 (hanya berselang 15 menit), reminder tetap harus dieksekusi karena checkpoint 08:30 belum pernah dilayani.
+    const lastSent = '2026-10-13T08:15:00+07:00';
+    const now = new Date('2026-10-13T08:30:00+07:00');
+    const result = isParticipantReminderDue({
+      settings: { ...baseSettings, reminder_times: ['08:30'] },
+      userTimezone: 'Asia/Jakarta',
+      userTodayLogs: [{ user_id: 'user-1', sent_at: lastSent }],
+      now,
+    });
+    expect(result).toBe(true);
+  });
+
   it('menolak pengiriman jika kuota harian maksimum telah tercapai', () => {
     const now = new Date('2026-10-13T12:00:00+07:00');
     const logs = [
