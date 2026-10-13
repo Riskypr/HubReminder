@@ -224,4 +224,16 @@ describe('isParticipantReminderDue()', () => {
       })
     ).toBe(false);
   });
+
+  it('mengizinkan pengiriman WhatsApp reminder saat jam personal user tiba meski belum pernah ada log WA', () => {
+    // Pengguna mengatur jam 19:51 WIB, waktu sekarang jam 19:51 WIB
+    const now1951 = new Date('2026-10-13T19:51:00+07:00');
+    const result = isParticipantReminderDue({
+      settings: { ...baseSettings, reminder_times: ['19:51'] },
+      userTimezone: 'Asia/Jakarta',
+      userTodayLogs: [], // Belum ada log WhatsApp hari ini
+      now: now1951,
+    });
+    expect(result).toBe(true);
+  });
 });

@@ -242,14 +242,30 @@ async function handleReminder(request: NextRequest) {
     // dan menghindari bug timezone saat membandingkan tanggal hari ini.
     const twoDaysAgoIso = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
 
-    const [{ data: settingsData, error: settingsError }, { data: notificationData, error: notificationError }, { data: cookieLogData, error: cookieLogError }] = await Promise.all([
+    const [
+      { data: settingsData, error: settingsError },
+      { data: notificationData, error: notificationError },
+      { data: cookieLogData, error: cookieLogError },
+      { data: phoneMappingData },
+    ] = await Promise.all([
       supabase.from('reminder_settings').select('user_id, enabled, max_reminders_per_day, interval_seconds, interval_minutes, reminder_times, snooze_until, updated_at').in('user_id', ids).order('updated_at', { ascending: false }),
       supabase.from('notification_logs').select('user_id, sent_at, channel').in('user_id', ids).gte('sent_at', twoDaysAgoIso),
       supabase.from('cookie_warning_logs').select('user_id, sent_at, session_updated_at, status').in('user_id', ids).gte('sent_at', twoDaysAgoIso),
+      supabase.from('wa_phone_mappings').select('user_id, phone_number').in('user_id', ids),
     ]);
     if (settingsError) throw new Error(`Gagal mengambil pengaturan reminder: ${settingsError.message}`);
     if (notificationError) throw new Error(`Gagal mengambil riwayat reminder: ${notificationError.message}`);
     if (cookieLogError) throw new Error(`Gagal mengambil riwayat warning cookie: ${cookieLogError.message}`);
+
+    // Petakan nomor WhatsApp yang terhubung ke masing-masing pengguna
+    const phoneNumbersByUser = new Map<string, string[]>();
+    for (const mapping of (phoneMappingData ?? []) as { user_id: string; phone_number: string }[]) {
+      const existing = phoneNumbersByUser.get(mapping.user_id) ?? [];
+      if (!existing.includes(mapping.phone_number)) {
+        existing.push(mapping.phone_number);
+      }
+      phoneNumbersByUser.set(mapping.user_id, existing);
+    }
 
     // Bangun Map settings per user, ambil yang paling baru (updated_at terbesar) jika ada duplikat
     // Duplikat bisa terjadi jika primary key constraint tidak berlaku pada tabel lama.
@@ -378,7 +394,7 @@ async function handleReminder(request: NextRequest) {
     });
 
     // 3. Evaluasi sesi untuk pengiriman WhatsApp:
-    // - Mode bulk: ikuti jadwal admin (start_time, interval, quota), kompilasi semua peserta belum lapor (tidak di-snooze)
+    // A. Jadwal Bulk Admin (Reminder Bersama Grup):
     const bulkReportSessions = unreportedSessions.filter((session) => {
       const settings = settingsByUser.get(session.user_id);
       if (!settings) return true;
@@ -390,8 +406,10 @@ async function handleReminder(request: NextRequest) {
       return true;
     });
 
-    // - Mode single: ikuti jadwal personal masing-masing peserta yang sedang jatuh tempo
-    const userDueSingleSessions = (adminSettings.reminder_mode === 'single' && isWaAllowed && !adminDailyQuotaReached)
+    // B. Jadwal Personal Per-User (Reminder Per User via WhatsApp):
+    // Memeriksa peserta belum lapor yang jadwal pengingat pribadinya (reminder_times) sedang jatuh tempo.
+    // Menjamin bahwa saat jadwal user tiba, notifikasi terkirim ke Web Push DAN WhatsApp.
+    const personalWaDueSessions = isWaAllowed
       ? unreportedSessions.filter((session) => {
           const settings = settingsByUser.get(session.user_id) ?? {
             user_id: session.user_id,
@@ -418,43 +436,115 @@ async function handleReminder(request: NextRequest) {
         })
       : [];
 
-    const dueReportSessions = !isWaAllowed || adminDailyQuotaReached
-      ? []
-      : adminSettings.reminder_mode === 'bulk'
-        ? (isBulkReminderDue ? bulkReportSessions : [])
-        : userDueSingleSessions;
-
     let reportSent = false;
     let reportProviderFailures: ProviderFailure[] = [];
-    if (dueReportSessions.length && foonte && targets.length) {
-      const members: CronReminderMember[] = dueReportSessions.map((session) => {
-        const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
-        return { name: profileData?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' };
-      });
+    let waReportUserCount = 0;
+
+    if (isWaAllowed && foonte) {
       const useAutoReport = !!process.env.GEMINI_API_KEY;
       const formatFn = useAutoReport ? formatAutoReportReminder : formatBulkReportReminder;
-      const messages = adminSettings.reminder_mode === 'bulk'
-        ? [{ userIds: dueReportSessions.map(({ user_id }) => user_id), targets, message: formatFn(members) }]
-        : dueReportSessions.map((session, index) => ({ userIds: [session.user_id], targets, message: formatFn([members[index]]) }));
-      const sendOutcomes: { userIds: string[]; targets: string[]; results: FoonteSendResult[] }[] = [];
-      for (const item of messages) sendOutcomes.push({ userIds: item.userIds, targets: item.targets, results: await sendToTargets(item.message, item.targets, foonte) });
-      reportProviderFailures = sendOutcomes.flatMap((outcome) => outcome.results.filter((result) => !result.ok).map(summarizeProviderFailure));
-      const sentUsers = [...new Set(sendOutcomes.flatMap((outcome) => outcome.results.every((result) => result.ok) ? outcome.userIds : []))];
-      const auditEntries = sendOutcomes.flatMap((outcome) => outcome.results.map((result, index) => ({
-        sent_at: now.toISOString(), status: result.ok ? 'sent' : 'failed', recipient: outcome.targets[index],
-        member_count: adminSettings.reminder_mode === 'bulk' ? dueReportSessions.length : 1,
-        provider_status: result.status, provider_response: result.responseBody || null,
-      })));
-      const { error: auditError } = auditEntries.length ? await supabase.from('reminder_logs').insert(auditEntries) : { error: null };
-      if (auditError) throw new Error(`Gagal menyimpan audit reminder: ${auditError.message}`);
-      if (sentUsers.length) {
-        const { error } = await supabase.from('notification_logs').insert(sentUsers.map((user_id) => {
+      const messages: { userIds: string[]; targets: string[]; message: string }[] = [];
+
+      // 1. Eksekusi Reminder Bersama (Admin Bulk):
+      // Jika mode bulk aktif, jadwal admin tiba, kuota admin belum habis, dan ada peserta yang belum lapor
+      if (isBulkReminderDue && bulkReportSessions.length > 0 && targets.length > 0) {
+        const members: CronReminderMember[] = bulkReportSessions.map((session) => {
+          const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+          return { name: profileData?.full_name?.trim() || 'Peserta MagangHub', status: 'belum_lapor' };
+        });
+        messages.push({
+          userIds: bulkReportSessions.map(({ user_id }) => user_id),
+          targets,
+          message: formatFn(members),
+        });
+      }
+
+      // 2. Eksekusi Reminder Per-User (Personal WhatsApp Reminder):
+      // Kirim pesan WhatsApp ke nomor peserta dan/atau grup sesuai jam pengingat masing-masing.
+      // Jika di menit ini pesan bulk admin sudah mencakup peserta tersebut, hindari duplikasi pesan di menit yang sama.
+      const bulkCoveredUserIds = isBulkReminderDue
+        ? new Set(bulkReportSessions.map((s) => s.user_id))
+        : new Set<string>();
+
+      const standalonePersonalSessions = personalWaDueSessions.filter(
+        (s) => !bulkCoveredUserIds.has(s.user_id)
+      );
+
+      for (const session of standalonePersonalSessions) {
+        const profileData = Array.isArray(session.profiles) ? session.profiles[0] : session.profiles;
+        const memberName = profileData?.full_name?.trim() || 'Peserta MagangHub';
+        const singleMessage = formatFn([{ name: memberName }]);
+
+        const userPhones = phoneNumbersByUser.get(session.user_id) ?? [];
+        // Kirim ke nomor WA pribadi peserta (jika terhubung di wa_phone_mappings) dan juga targets (grup)
+        const destTargets = userPhones.length > 0
+          ? [...new Set([...userPhones, ...targets])]
+          : targets;
+
+        if (destTargets.length > 0) {
+          messages.push({
+            userIds: [session.user_id],
+            targets: destTargets,
+            message: singleMessage,
+          });
+        }
+      }
+
+      waReportUserCount = new Set(messages.flatMap((m) => m.userIds)).size;
+
+      if (messages.length > 0) {
+        const sendOutcomes: { userIds: string[]; targets: string[]; results: FoonteSendResult[] }[] = [];
+        for (const item of messages) {
+          sendOutcomes.push({
+            userIds: item.userIds,
+            targets: item.targets,
+            results: await sendToTargets(item.message, item.targets, foonte),
+          });
+        }
+
+        reportProviderFailures = sendOutcomes.flatMap((outcome) =>
+          outcome.results.filter((result) => !result.ok).map(summarizeProviderFailure)
+        );
+
+        const sentUsers = [...new Set(sendOutcomes.flatMap((outcome) =>
+          outcome.results.every((result) => result.ok) ? outcome.userIds : []
+        ))];
+
+        const auditEntries = sendOutcomes.flatMap((outcome) =>
+          outcome.results.map((result, index) => ({
+            sent_at: now.toISOString(),
+            status: result.ok ? ('sent' as const) : ('failed' as const),
+            recipient: outcome.targets[index] || 'unknown',
+            member_count: outcome.userIds.length,
+            provider_status: result.status,
+            provider_response: result.responseBody || null,
+          }))
+        );
+
+        const { error: auditError } = auditEntries.length
+          ? await supabase.from('reminder_logs').insert(auditEntries)
+          : { error: null };
+        if (auditError) console.error('[cron/reminder] Gagal menyimpan audit reminder:', auditError.message);
+
+        if (sentUsers.length > 0) {
           const today = localDate(now, 'Asia/Jakarta');
-          const previousCount = waNotificationRows.filter((log) => log.user_id === user_id && localDate(new Date(log.sent_at), 'Asia/Jakarta') === today).length;
-          return { user_id, sent_at: now.toISOString(), status_at_send: 'belum_lapor', sequence_today: previousCount + 1, channel: 'whatsapp' };
-        }));
-        if (error) throw new Error(`Gagal menyimpan riwayat reminder: ${error.message}`);
-        reportSent = true;
+          const notificationLogEntries = sentUsers.map((user_id) => {
+            const previousCount = waNotificationRows.filter(
+              (log) => log.user_id === user_id && localDate(new Date(log.sent_at), 'Asia/Jakarta') === today
+            ).length;
+            return {
+              user_id,
+              sent_at: now.toISOString(),
+              status_at_send: 'belum_lapor' as const,
+              sequence_today: previousCount + 1,
+              channel: 'whatsapp' as const,
+            };
+          });
+
+          const { error: notifError } = await supabase.from('notification_logs').insert(notificationLogEntries);
+          if (notifError) console.error('[cron/reminder] Gagal menyimpan riwayat reminder:', notifError.message);
+          reportSent = true;
+        }
       }
     }
 
@@ -578,7 +668,7 @@ async function handleReminder(request: NextRequest) {
               ? 'admin_daily_quota_reached'
               : sessionsStillUnreported === 0 && warningSessions.length === 0
                 ? 'no_unreported_or_cookie_warning_sessions'
-                : dueReportSessions.length === 0 && userDuePushSessions.length === 0
+                : waReportUserCount === 0 && userDuePushSessions.length === 0
                   ? 'no_participants_due_at_this_time'
                   : 'participants_blocked_by_settings_or_interval';
     return NextResponse.json({
@@ -586,7 +676,7 @@ async function handleReminder(request: NextRequest) {
       sent: reportSent || cookieWarningsSent > 0 || pushSentCount > 0,
       reason,
       reportSent,
-      reportMemberCount: dueReportSessions.length,
+      reportMemberCount: waReportUserCount,
       cookieWarningsSent,
       reportProviderFailures,
       cookieProviderFailures,
