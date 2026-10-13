@@ -476,9 +476,10 @@ async function handleReminder(request: NextRequest) {
         const singleMessage = formatFn([{ name: memberName }]);
 
         const userPhones = phoneNumbersByUser.get(session.user_id) ?? [];
-        // Kirim ke nomor WA pribadi peserta (jika terhubung di wa_phone_mappings) dan juga targets (grup)
+        // Jika nomor WA sudah ter-mapping atau sudah mengirim chat via pribadi, kirim HANYA ke chat pribadi (tidak ke grup).
+        // Grup WA hanya digunakan sebagai fallback jika peserta belum memiliki nomor WA yang termapping.
         const destTargets = userPhones.length > 0
-          ? [...new Set([...userPhones, ...targets])]
+          ? userPhones
           : targets;
 
         if (destTargets.length > 0) {
