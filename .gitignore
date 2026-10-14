@@ -6,3 +6,8 @@ node_modules/
 out/
 .DS_Store
 *.pem
+
+# Internal docs & tests — tidak di-push ke remote
+docs/
+tests/
+changelog_progress_tracker.md
