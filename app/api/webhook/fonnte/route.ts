@@ -406,6 +406,13 @@ export async function POST(request: NextRequest) {
 
   const action = parseUserBotAction(message);
 
+  // Di grup, bot HANYA merespons command yang dikenali.
+  // Pesan bebas (obrolan, pertanyaan, dsb) diabaikan diam-diam.
+  if (isGroup && action.type === 'report_input') {
+    console.log(`[webhook/fonnte] Mengabaikan pesan bebas di grup dari ${phone} (bukan command yang dikenali)`);
+    return NextResponse.json({ ok: true, skipped: 'group_non_command_ignored' });
+  }
+
   // === 1. COMMAND: link [nama] ===
   if (action.type === 'link') {
     const result = await linkPhoneToUser(phone, action.name);
