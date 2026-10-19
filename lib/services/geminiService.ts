@@ -93,7 +93,7 @@ Buatkan laporan harian magang dengan format JSON berikut. Setiap bagian harus MI
 PENTING:
 - Jawab HANYA dengan JSON valid, tanpa markdown code block, tanpa penjelasan tambahan.
 - Setiap field minimal 100 karakter.
-- Gunakan bahasa formal tapi natural, jangan terlalu kaku.
+- Gunakan bahasa formal tapi natural, buat seperti bahasa manusia pada umumnya .
 - Buat relevan dengan input peserta dan profilnya.
 - Jangan mengada-ada kegiatan yang tidak disebutkan.`;
 
