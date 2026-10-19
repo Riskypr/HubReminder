@@ -17,7 +17,64 @@ function getApiKey(): string {
   return key;
 }
 
-function extractJsonFromText(text: string): GeneratedReport | null {
+export function buildPrompt(
+  userInput: string,
+  profile: {
+    name?: string | null;
+    company?: string | null;
+    position?: string | null;
+  },
+): string {
+  const profileContext = [
+    profile.name ? `Nama: ${profile.name}` : null,
+    profile.company ? `Perusahaan/Instansi: ${profile.company}` : null,
+    profile.position ? `Posisi/Divisi: ${profile.position}` : null,
+  ].filter(Boolean).join('\n');
+
+  return `Kamu adalah seorang ahli penulis laporan kegiatan profesional yang membantu peserta magang menyusun laporan harian untuk platform MagangHub Kemnaker.
+
+Profil Peserta:
+${profileContext || 'Tidak ada informasi profil tersedia.'}
+
+Input Singkat dari Peserta mengenai Kegiatan Hari Ini:
+"${userInput}"
+
+Tugas Utama:
+Ubahlah input singkat peserta di atas menjadi narasi laporan harian formal, alami, profesional, dan mengalir seperti tulisan manusia profesional.
+
+Susun keluaran dalam format JSON dengan struktur persis berikut:
+{
+  "activity": "Uraian kegiatan lengkap dan kronologis",
+  "lesson": "Ilmu, pemahaman teknis, dan keterampilan yang diperoleh",
+  "challenge": "Uraian kendala/hambatan beserta penanganan atau pernyataan kelancaran kegiatan"
+}
+
+Pedoman Penulisan untuk Setiap Field:
+
+1. Field "activity" (Uraian Kegiatan):
+   - Gunakan gaya bahasa naratif kronologis (misal: "Rangkaian kegiatan magang saya di [Nama Perusahaan/Instansi] pada hari ini diawali dengan... Pada sesi pagi... Dilanjutkan pada siang/sore hari...").
+   - Cantumkan lokasi, jenis tugas, atau objek pekerjaan secara rinci berdasarkan input peserta dan profil.
+   - Ceritakan alur dari pelaksanaan/pengambilan data/eksekusi hingga tahap penyelesaian, pengecekan, atau penginputan (submit) data ke sistem.
+   - Minimal 100 karakter.
+
+2. Field "lesson" (Ilmu & Pengetahuan yang Diperoleh):
+   - Jelaskan pemahaman teknis, alur kerja, pentingnya validasi/ketelitian/pemeriksaan data (clean data), serta aspek akuntabilitas.
+   - Hubungkan tugas yang dikerjakan dengan nilai atau pembelajaran profesional yang didapatkan.
+   - Minimal 100 karakter.
+
+3. Field "challenge" (Kendala dan Hambatan):
+   - Boleh menyatakan bahwa kegiatan berjalan lancar tanpa hambatan berarti jika input tidak menyebutkan masalah mendasar.
+   - Jika ada hambatan, jelaskan secara positif beserta upaya perbaikan/solusinya.
+   - Gunakan kalimat seperti: "Secara keseluruhan... berjalan dengan lancar... tidak mengalami kendala yang berarti baik saat berinteraksi dengan responden/rekan kerja maupun saat submit data."
+   - Minimal 100 karakter.
+
+Ketentuan Format Output:
+- HANYA kembalikan JSON valid tanpa tag markdown (\`\`\`json), tanpa kata pengantar, dan tanpa penjelasan tambahan.
+- Bahasa Indonesia baku, formal, natural, dan mudah dipahami.
+- Jangan mengada-ada informasi utama yang berlawanan dengan input peserta.`;
+}
+
+export function extractJsonFromText(text: string): GeneratedReport | null {
   if (!text) return null;
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
@@ -39,7 +96,7 @@ function extractJsonFromText(text: string): GeneratedReport | null {
   return null;
 }
 
-function ensureMinLength(text: string, minLength = 100): string {
+export function ensureMinLength(text: string, minLength = 100): string {
   let result = (text || '').trim();
   if (result.length >= minLength) return result;
 
@@ -68,34 +125,7 @@ export async function generateReport(
     new Set([configuredModel, 'gemini-3.5-flash-lite', 'gemini-3.8-flash'].filter(Boolean)),
   ) as string[];
 
-  const profileContext = [
-    profile.name ? `Nama: ${profile.name}` : null,
-    profile.company ? `Perusahaan/Instansi: ${profile.company}` : null,
-    profile.position ? `Posisi/Divisi: ${profile.position}` : null,
-  ].filter(Boolean).join('\n');
-
-  const prompt = `Kamu adalah asisten yang membantu peserta magang menulis laporan harian untuk platform MagangHub Kemnaker.
-
-Profil Peserta:
-${profileContext || 'Tidak ada informasi profil tersedia.'}
-
-Input dari peserta tentang kegiatan hari ini:
-"${userInput}"
-
-Buatkan laporan harian magang dengan format JSON berikut. Setiap bagian harus MINIMAL 100 karakter dan ditulis dalam Bahasa Indonesia yang baik dan profesional.
-
-{
-  "activity": "Uraian detail aktivitas/pekerjaan yang dilakukan hari ini berdasarkan input peserta. Jelaskan secara rinci langkah-langkah dan proses kerja yang dilakukan.",
-  "lesson": "Pelajaran dan insight yang diperoleh dari aktivitas hari ini. Sertakan skill atau pengetahuan baru yang didapat.",
-  "challenge": "Kendala atau tantangan yang dihadapi selama melakukan aktivitas tersebut, serta bagaimana mengatasinya."
-}
-
-PENTING:
-- Jawab HANYA dengan JSON valid, tanpa markdown code block, tanpa penjelasan tambahan.
-- Setiap field minimal 100 karakter.
-- Gunakan bahasa formal tapi natural, buat seperti bahasa manusia pada umumnya .
-- Buat relevan dengan input peserta dan profilnya.
-- Jangan mengada-ada kegiatan yang tidak disebutkan.`;
+  const prompt = buildPrompt(userInput, profile);
 
   let lastError = 'Gagal menghubungi Gemini API';
 
